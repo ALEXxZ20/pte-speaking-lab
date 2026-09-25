@@ -1,0 +1,2 @@
+# Optional local phoneme candidate provider. Does not enable default gTTS analysis.
+openpronounce==0.3.0

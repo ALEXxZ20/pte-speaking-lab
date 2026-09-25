@@ -1,0 +1,4 @@
+# Optional local CPU forced alignment on Apple Silicon. Install into backend/.venv.
+whisperx==3.8.6
+torch==2.8.0
+torchaudio==2.8.0

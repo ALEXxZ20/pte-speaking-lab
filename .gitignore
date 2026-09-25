@@ -1,0 +1,34 @@
+# Local data and secrets
+.env
+.env.*
+!.env.example
+data/
+测试数据包/
+*.sqlite3
+*.sqlite3-*
+
+# macOS and editors
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Frontend and build outputs
+node_modules/
+dist/
+coverage/
+.vite/
+
+# Temporary files
+*.log
+tmp/
+.cache/

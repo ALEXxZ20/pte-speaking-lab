@@ -1,0 +1,30 @@
+# PTE Speaking Lab — MVP 开发任务
+
+**依据：** [PROJECT_SPEC.md](PROJECT_SPEC.md)、[ARCHITECTURE.md](ARCHITECTURE.md)<br>
+**状态：** T00–T09 已实现；T10 的自动化验收已完成，真实词色人工复核及 OpenAI 真实密钥调用仍待用户提供条件。具体结果见 [MVP_ACCEPTANCE.md](docs/MVP_ACCEPTANCE.md)。Content 只存猩际分数，不设自行评分任务。
+
+## 交付顺序
+
+先并行准备 T00 的真实截图词色匹配验证与 T01 的工程基础；两者完成后进入 T02。T03 输入页面与 T04 音频底座都依赖 T02。T05 与 T06 可独立实现和验证；T09 结果页面等待 T03、T07、T08 的报告合同。下表依赖列为准。
+
+| ID | 工作包 | 依赖 | 完成定义 |
+|---|---|---|---|
+| T00 | 用可复制的猩际转写及真实双边颜色截图验证词序匹配、颜色/可见停顿提取和错位纠正成本；并用录音验证 M2 对齐与 OpenPronounce 的基本可用性 | 无 | 记录真实样本的成功/失败例、资源耗用和可复核映射草稿；定下 MVP 可支持的截图版式及发音结论边界。 |
+| T01 | 项目基础：FastAPI/React/Vite/Tailwind/WaveSurfer 骨架、运行脚本、`.env.example`、健康检查、SQLite 迁移框架 | 无 | M2 上一条启动流程可打开首页与 API；数据和密钥目录被 Git 忽略。 |
+| T02 | 双边 ResponseSample：粘贴转写、手工分数、颜色截图资产及映射草稿、Exercise、音频、逐词颜色/停顿标签、不可变输入版本的 schema 与 API | T00、T01 | 两侧草稿可保存、复核与重启后读取；旧报告能绑定原输入版本；Content 只存取。 |
+| T03 | 输入页面：双边音频/颜色截图上传、转写粘贴、分数录入、原图与颜色映射并排复核、校验提示；历史列表基础 | T02 | 真实双边截图可匹配到粘贴转写并纠错，无需从头逐词录入颜色；没有密钥泄露到浏览器。 |
+| T04 | 音频底座：FFmpeg 探测/无损保留原件、衍生 WAV、语音/静音候选区间、转写一致性检查、AlignmentProvider、时间戳质量检查 | T02 | 原文件哈希不变；可回放可信词片段；静音阈值误判或对齐失败产生明确 partial 状态。 |
+| T05 | PronunciationEngine：红黄词优先、颜色分布、目标词证据、可选 OpenPronounce 适配器接口 | T04 | 不读取 FluencyResult 也能运行；没有声学证据时不输出具体音素断言。 |
+| T06 | FluencyEngine：WPM、停顿、语音/静音比例、短语、重复、false starts、fillers、rate stability | T04 | 不读取 PronunciationResult 也能运行；不同文本可比较；口误未在转写保留时显示不可判断，缺可信语音区间/词时间戳时相关指标降级。 |
+| T07 | ComparisonService：共享词实例配对、整体颜色统计和流利度指标差值；统一 Evidence 与报告 JSON | T05、T06 | 不共享的词不进入逐词 A/B；每个差异标明样本量、量表、质量和缺失原因。 |
+| T08 | DiagnosisEngine 与 OpenAI LLMProvider：证据约束的交叉诊断、Top 3 训练建议、失败回退 | T07 | 每条 Finding 引用有效证据 ID；LLM 不增加未经证实的事实；API 故障仍保留规则结果。 |
+| T09 | 结果体验：双边波形、片段跳转、发音/流利度独立面板、共享词、证据时间轴、重跑和历史 | T03、T07、T08 | 一条完整比较可在 UI 中查看、回听、追溯证据并重新分析。 |
+| T10 | MVP 验收：真实双边转写、颜色截图和录音、独立管线/降级/版本持久化/密钥测试、M2 内存与耗时记录、迁移说明 | T09 | 满足 PROJECT_SPEC 的验收标准；记录任何未通过项及复现方式。 |
+
+## 工作边界与协作规则
+
+- T02/T04 是共同接口的稳定点；后续任务应先对齐 `ResponseSample`、`PreparedSample`、Evidence 和 report schema。
+- T05 与 T06 不共用对方的引擎输出；T08 是唯一跨维度推断位置。
+- 云端调用需要 OpenAI API Platform 的独立 key。没有 key 时，T01–T07 和 T09 的非 LLM 部分仍应可开发、测试。
+- GitHub 远程仓库是单独决定；本地 Git 初始化和开发不依赖 GitHub 登录。
+- 截图导入与人工复核在 MVP；Phase 2/3 的更多截图版式、本地模型、PronounceAI/GOPT 和 Content 诊断不进入以上 MVP 工作包。

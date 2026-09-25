@@ -1,0 +1,2 @@
+# Optional OpenAI wording provider; requires a separate OpenAI API key.
+openai==3.19.2
