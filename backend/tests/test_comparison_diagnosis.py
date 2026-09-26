@@ -54,3 +54,22 @@ def test_diagnosis_rejects_invented_evidence_and_falls_back():
     assert result["findings"][0]["statement"] != "unsupported"
     existing = {item["id"] for item in pron["evidence"] + flu["evidence"]}
     assert all(id in existing for finding in result["findings"] for id in finding["evidence_ids"])
+
+
+def test_diagnosis_does_not_apply_partial_llm_edits_on_validation_failure():
+    pronunciation = {"evidence": [{"id": "red", "kind": "xingji_word_color", "details": {"color": "red"},
+                                   "start_s": None, "end_s": None}]}
+    fluency = {"evidence": [{"id": "pause", "kind": "pause_candidate", "quality": "medium", "value": 700}],
+               "metrics": {"long_pause_count": {"value": 1, "quality": "medium"}}}
+
+    class InvalidSecondFinding:
+        def explain(self, findings, evidence):
+            return [{"id": findings[0]["id"], "evidence_ids": findings[0]["evidence_ids"],
+                     "statement": "overwritten", "recommendation": "overwritten"},
+                    {"id": findings[1]["id"], "evidence_ids": ["invented"],
+                     "statement": "overwritten", "recommendation": "overwritten"}]
+
+    result = diagnose(pronunciation, fluency, {"fluency_metric_differences": {}}, InvalidSecondFinding())
+    assert result["llm_status"] == "fallback_to_rules"
+    assert len(result["findings"]) == 2
+    assert all(finding["statement"] != "overwritten" for finding in result["findings"])

@@ -13,7 +13,7 @@
 | `backend/app/engines/` | 发音、流利度两个独立引擎及交叉维度诊断。 |
 | `backend/app/comparison/` | 共同朗读稿覆盖、共享词与双边指标比较。 |
 | `backend/app/analysis/` | 分析运行编排、不可变输入快照和报告持久化。 |
-| `backend/app/providers/` | 可选 OpenAI 解释与 OpenPronounce 音素候选适配器。 |
+| `backend/app/providers/` | 可选官方 OpenAI、CLIProxyAPI 兼容接口文案改写与 OpenPronounce 音素候选适配器。 |
 | `backend/app/persistence/` | SQLite 连接、迁移、样本修订和删除清理。 |
 | `backend/tests/` | 后端单元、API、退化行为与内网保护测试。 |
 | `frontend/src/api/` | 浏览器与后端 API 的请求及 TypeScript 类型。 |
@@ -61,7 +61,7 @@
 | `backend/app/engines/diagnosis.py` | 在两个引擎完成后生成有证据引用的训练建议。 |
 | `backend/app/comparison/service.py` | 共同原文词位覆盖、共享词 A/B、双边流利度差值。 |
 | `backend/app/analysis/runner.py` | 锁定样本版本，运行音频/双引擎/比较/诊断并保存不可变报告。 |
-| `backend/app/providers/openai_llm.py` | 可选 OpenAI 文案解释；校验返回结构与证据 ID。 |
+| `backend/app/providers/openai_llm.py` | 可选官方 OpenAI 和 CLIProxyAPI 兼容接口文案改写；解析返回结构，证据 ID 在诊断层校验。 |
 | `backend/app/providers/openpronounce.py` | 本地音素候选；只处理可定位的目标词，不生成评分。 |
 | `backend/app/persistence/database.py` | SQLite 连接及按版本执行迁移。 |
 | `backend/app/persistence/samples.py` | 创建双边样本、验证资产、保存可编辑视图和不可变修订。 |
@@ -95,6 +95,7 @@
 | `backend/tests/test_health.py` | 启动、健康检查与配置。 |
 | `backend/tests/test_lan.py` | 内网页面和 API 的密码保护。 |
 | `backend/tests/test_runs.py` | 分析运行、候选词色、云端配置与历史报告不可变。 |
+| `backend/tests/test_llm_provider.py` | CLIProxyAPI 兼容请求路径、JSON 解析与地址校验。 |
 | `backend/tests/test_samples.py` | 双边资产、样本修订、数据校验与共享文件删除。 |
 | `backend/tests/test_screenshot_mapping.py` | OCR 词序、重复词、低置信度与页眉排除。 |
 

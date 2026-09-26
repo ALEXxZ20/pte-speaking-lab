@@ -54,15 +54,16 @@ def provider_checks(settings: Settings) -> dict[str, ProviderCheck]:
     }.items():
         disabled = name == "none"
         configured = bool(
-            kind == "llm" and name == "openai"
+            kind == "llm" and name in {"openai", "openai_compatible"}
             and settings.openai_api_key.get_secret_value().strip()
             and settings.openai_analysis_model.strip()
+            and (name != "openai_compatible" or bool(settings.openai_base_url.strip()))
         )
-        supported = ((kind == "llm" and name == "openai") or
+        supported = ((kind == "llm" and name in {"openai", "openai_compatible"}) or
                      (kind == "alignment" and name == "whisperx") or
                      (kind == "pronunciation" and name == "openpronounce"))
         result[kind] = ProviderCheck(
-            name=name if name in {"none", "openai", "whisperx", "openpronounce"} else "unsupported",
+            name=name if name in {"none", "openai", "openai_compatible", "whisperx", "openpronounce"} else "unsupported",
             status="disabled" if disabled else "configured" if configured else "available" if supported else "not_implemented",
             configured=configured,
         )

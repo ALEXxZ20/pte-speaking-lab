@@ -14,10 +14,10 @@
 | 后端 | FastAPI + SQLite + 本地 filesystem + FFmpeg/ffprobe | 持久化与可复算音频预处理，避免额外服务。 |
 | 数据源 | 共同朗读原文 + 双边 ResponseSample；用户真人录音与已生成 AI 参考录音各自的猩际转写、分数、颜色截图和复核后的词级标签 | 分别保留原始来源与修订历史，不尝试重建猩际评分。 |
 | 分析 | Pronunciation 与 Fluency 独立运行；Diagnosis 最后融合 | 可以单独验证、单独失败与重跑。 |
-| AI | OpenAI 先实现，Provider 契约隔离 | 后续可替换云端或本地实现。 |
+| AI | 官方 OpenAI 与兼容 Chat Completions 接口；Provider 契约隔离 | 可经本机 CLIProxyAPI 调用已授权模型，后续可扩展其他实现。 |
 | Content | 仅存储猩际值/量表 | 防止需求蔓延和误称自行评分。 |
 
-ChatGPT Plus 订阅与 OpenAI API 是独立产品和计费渠道；本项目需要用户在 OpenAI API Platform 创建并配置独立的 `OPENAI_API_KEY`。API key 只存在服务端环境，不进入浏览器或 SQLite。模型名全部配置化，不锁定某个随时间变化的型号。
+ChatGPT Plus 订阅与 OpenAI API 是独立产品和计费渠道；使用官方 OpenAI 时需独立 API key，使用 CLIProxyAPI 时需该代理认可的访问密钥。两者在项目中均由服务端 `OPENAI_API_KEY` 配置，不进入浏览器或 SQLite。模型名全部配置化，不锁定某个随时间变化的型号。
 
 ## 2. 组件与依赖方向
 
@@ -108,7 +108,7 @@ class LLMProvider(Protocol):
     async def explain(self, evidence_package: DiagnosisInput) -> StructuredExplanation: ...
 ```
 
-Provider Registry 按配置构建实例，业务层只调用契约。MVP：OpenAI `LLMProvider`；`TranscriptionProvider` 可接 OpenAI，但主流程已获得猩际转写，不强制调用。OpenPronounce 作为可选 `PronunciationProvider`；需要通过真实样本验证校准，不能把它的分数映射为猩际或官方分数。为 Anthropic、Gemini、OpenAI-compatible、Ollama/LM Studio、本地 ASR、本地 LLM 保留配置名和接口/适配器位置；**不把未实现项显示为可用 Provider**。OpenAI-compatible 可用自定义 base URL，服务端校验且默认只绑定本机地址以减少误配。
+Provider Registry 按配置构建实例，业务层只调用契约。当前实现 OpenAI 官方 Responses API 与 OpenAI-compatible Chat Completions API（用于 CLIProxyAPI）；`TranscriptionProvider` 可接 OpenAI，但主流程已获得猩际转写，不强制调用。OpenPronounce 作为可选 `PronunciationProvider`；需要通过真实样本验证校准，不能把它的分数映射为猩际或官方分数。为 Anthropic、Gemini、Ollama/LM Studio、本地 ASR、本地 LLM 保留配置名和接口/适配器位置；**不把未实现项显示为可用 Provider**。OpenAI-compatible 使用服务端配置的自定义 base URL；本机 HTTP 可用，远端须为 HTTPS。
 
 ## 5. 发音 pipeline
 
@@ -357,13 +357,11 @@ OPENAI_TRANSCRIPTION_MODEL=<set-only-if-asr-enabled>
 OPENAI_BASE_URL=
 ANTHROPIC_API_KEY=
 GEMINI_API_KEY=
-OPENAI_COMPATIBLE_BASE_URL=
-OPENAI_COMPATIBLE_API_KEY=
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 LM_STUDIO_BASE_URL=http://127.0.0.1:1234/v1
 ```
 
-`ALIGNMENT_PROVIDER=whisperx` 是目标配置示例；实际发布应通过 M2 实测确认版本及安装依赖。若模型首次下载需要网络或依赖许可，安装流程必须明确提示。`PRONUNCIATION_PROVIDER=none` 只做猩际标签级结果；启用 OpenPronounce 后才显示其具体模型线索。Provider 配置校验在启动和运行前执行，未实现的 Provider 返回清晰错误。
+`ALIGNMENT_PROVIDER=whisperx` 是目标配置示例；实际发布应通过 M2 实测确认版本及安装依赖。若模型首次下载需要网络或依赖许可，安装流程必须明确提示。`PRONUNCIATION_PROVIDER=none` 只做猩际标签级结果；启用 OpenPronounce 后才显示其具体模型线索。CLIProxyAPI 的实际配置为 `LLM_PROVIDER=openai_compatible`、`OPENAI_BASE_URL=http://127.0.0.1:8317/v1`，并填入其访问密钥与可用模型 ID。Provider 配置在运行前校验；不支持的名称返回明确错误。上方其他服务环境变量仅是未来扩展示例，不代表已有相应适配器。
 
 ## 11. 测试与观测
 

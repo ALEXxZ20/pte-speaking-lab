@@ -13,7 +13,7 @@ from app.engines.fluency import analyze_fluency
 from app.engines.pronunciation import analyze_pronunciation
 from app.persistence.database import connect
 from app.persistence.samples import now, uid
-from app.providers.openai_llm import OpenAILLMProvider
+from app.providers.openai_llm import OpenAILLMProvider, OpenAICompatibleLLMProvider
 from app.providers.openpronounce import OpenPronouncePhones
 
 VERSION = "analysis-v3"
@@ -52,6 +52,15 @@ def run_comparison(comparison_id: str, settings: Settings, allow_cloud: bool = F
                    use_openpronounce: bool = False) -> dict:
     if allow_cloud and not (settings.openai_api_key.get_secret_value().strip() and settings.openai_analysis_model.strip()):
         raise ValueError("openai_key_and_model_required")
+    llm = None
+    if allow_cloud:
+        if settings.llm_provider == "openai":
+            llm = OpenAILLMProvider(settings.openai_api_key.get_secret_value(), settings.openai_analysis_model)
+        elif settings.llm_provider == "openai_compatible":
+            llm = OpenAICompatibleLLMProvider(settings.openai_api_key.get_secret_value(),
+                                             settings.openai_analysis_model, settings.openai_base_url)
+        else:
+            raise ValueError("llm_provider_not_supported")
     with connect(settings.database_path) as db:
         db.execute("BEGIN IMMEDIATE")
         comparison = db.execute("SELECT c.user_sample_id,c.benchmark_sample_id,e.reading_text_raw FROM comparisons c JOIN exercises e ON e.id=c.exercise_id WHERE c.id=?", (comparison_id,)).fetchone()
@@ -65,7 +74,9 @@ def run_comparison(comparison_id: str, settings: Settings, allow_cloud: bool = F
         reading_text_raw = comparison["reading_text_raw"]
         run_id = uid("run")
         config = {"alignment_provider": settings.alignment_provider, "pronunciation_provider": "openpronounce" if use_openpronounce else "none",
-                  "llm_provider": "openai" if allow_cloud else "none", "pause_min_ms": settings.pause_min_ms,
+                  "llm_provider": settings.llm_provider if allow_cloud else "none",
+                  "llm_model": settings.openai_analysis_model if allow_cloud else None,
+                  "pause_min_ms": settings.pause_min_ms,
                   "long_pause_ms": settings.long_pause_ms, "very_long_pause_ms": settings.very_long_pause_ms,
                   "cross_dimension_window_ms": settings.cross_dimension_window_ms}
         db.execute("INSERT INTO analysis_runs VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -78,7 +89,6 @@ def run_comparison(comparison_id: str, settings: Settings, allow_cloud: bool = F
         comparison_result = compare(left["sample"], right["sample"], left["alignment"], right["alignment"],
                                     left["pronunciation"], right["pronunciation"], left["fluency"], right["fluency"],
                                     reading_text_raw)
-        llm = OpenAILLMProvider(settings.openai_api_key.get_secret_value(), settings.openai_analysis_model) if allow_cloud else None
         diagnosis = diagnose(left["pronunciation"], left["fluency"], comparison_result, llm, settings.cross_dimension_window_ms)
         partial = any(result["alignment"]["status"] != "complete" or result["fluency"]["status"] != "complete" or result["pronunciation"]["status"] != "complete" for result in results.values())
         report = {"run_id": run_id, "comparison_id": comparison_id, "status": "partial" if partial else "complete",

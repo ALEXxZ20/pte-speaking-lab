@@ -73,5 +73,6 @@ def provider_settings(request: Request) -> dict:
             "llm": settings.llm_provider,
             "openai_model": settings.openai_analysis_model or None,
             "openai_key_configured": bool(settings.openai_api_key.get_secret_value().strip()),
+            "llm_base_url_configured": bool(settings.openai_base_url.strip()) if settings.llm_provider == "openai_compatible" else True,
             "openpronounce_available": importlib.util.find_spec("openpronounce") is not None,
             "cloud_requires_explicit_run_choice": True}

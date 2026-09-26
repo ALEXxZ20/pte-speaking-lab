@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     asr_provider: str = "none"
     openai_api_key: SecretStr = SecretStr("")
     openai_analysis_model: str = ""
+    openai_base_url: str = ""
     pte_lan_mode: bool = False
     pte_lan_bind_ip: str = "127.0.0.1"
     pte_lan_port: int = 8765

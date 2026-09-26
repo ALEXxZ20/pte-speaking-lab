@@ -58,3 +58,9 @@
 - 用户在内网比较页重新分析时收到 `503/local_dependency_missing`。用同一比较的受密码保护 API 稳定复现；关闭 OpenPronounce 后仍失败。健康检查显示 `ffmpeg`、`ffprobe` 都为 `missing`，但 Homebrew 安装与原始录音文件均存在。根因是 macOS `launchd` 服务未继承终端中的 Homebrew 路径。
 - `scripts/start.sh` 现为后台服务显式设置包含 Homebrew 的 `PATH`，启动前检查两项音频工具。在不含 Homebrew 的调用方 `PATH` 下重启成功，健康检查两项均为 `ok`；原比较重新分析返回 HTTP 200、报告状态 `partial`，不再触发 503。分析仍为部分完成是候选证据与部分时间戳质量限制，不是此报错。
 - 证据时间轴把 `the · red`、`phoneme_model_candidate` 和 `high/low` 等内部名称改成中文词色、OpenPronounce 音素模型线索与“证据可信度”。音素线索未经校准，证据可信度不等于发音分数；时间轴继续按录音时间排列，仅给用户红黄词上色。
+
+## 2026-09-26：CLIProxyAPI 接入
+
+- 增加 `LLM_PROVIDER=openai_compatible`，通过 `OPENAI_BASE_URL` 将可选训练建议改写送往兼容 Chat Completions 服务。官方 OpenAI Responses 路径保留；默认仍不调用 LLM，调用失败回退本机规则。
+- 本机 Git 忽略的 `.env` 已设置 `http://127.0.0.1:8317/v1` 和用户指定的 `gpt-6-sol`；访问密钥尚未填写，真实代理模型调用待填写密钥后验证。根路径确认服务正在监听，未授权 `/v1/models` 返回 401。
+- Provider 请求只传规则结论与相关证据，返回 JSON 经过结构及 finding/evidence ID 校验；任一条校验失败会整体保留本机规则结果。后端和网页状态不暴露密钥。已通过兼容接口模拟请求与完整分析集成测试；后端 **36 passed**、前端生产构建通过。重启后的内网网页、健康检查和 Provider 设置均为 200，未授权访问为 401；真实模型调用仍待填入密钥后验证。

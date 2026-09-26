@@ -47,7 +47,7 @@
 
 流利度各指标用同一算法与阈值分别测量，展示两侧原值、差值与质量；缺失值在表格中统一显示“无法判断”，表格上方说明常见原因及配置条件，下方以中文总结有效指标。两侧词数/尾部可能不同，速度差不是目标分数。发音侧另比较词色总体分布。证据时间轴按录音时间排列，仅给用户红词和黄词条目加对应底色，不改变时间顺序。
 
-`engines/diagnosis.py` 在两个独立引擎之后运行，以有证据 ID 的红词、长停顿、局部语速波动生成最多三项建议；红词附近的停顿只表述为相关假设。可选 OpenAI 只改写这些规则建议，返回的 finding ID 和证据 ID 必须与本机结果完全一致，否则回退原规则。Content 不进入诊断。
+`engines/diagnosis.py` 在两个独立引擎之后运行，以有证据 ID 的红词、长停顿、局部语速波动生成最多三项建议；红词附近的停顿只表述为相关假设。可选 LLM 只改写这些规则建议，返回的 finding ID 和证据 ID 必须与本机结果完全一致，否则回退原规则。Content 不进入诊断。
 
 ## 3. 数据库、版本与接口
 
@@ -57,7 +57,7 @@ API 前缀 `/api/v1`：资产上传/读取；`POST /comparisons`、`GET /compari
 
 ## 4. Provider 与故障降级
 
-已实现的选择：`ALIGNMENT_PROVIDER=whisperx|none`；OpenPronounce 由每次运行开关控制；OpenAI 由已配置 key/模型和本次 `allow_cloud` 同时控制。缺对齐模型或对齐失败时使用 `NoAlignment`，并将依赖位置的指标标为不可用。OpenPronounce 失败只影响该词候选。OpenAI 失败回退规则。Anthropic、Gemini、OpenAI-compatible、Ollama/LM Studio、本地 ASR/LLM 仍是预留方向，当前不能选择使用。
+已实现的选择：`ALIGNMENT_PROVIDER=whisperx|none`；OpenPronounce 由每次运行开关控制；LLM 可选 `openai`（官方 Responses API）或 `openai_compatible`（Chat Completions API，供 CLIProxyAPI 使用）。两者都需要后端 key、模型和本次 `allow_cloud` 勾选；兼容接口还需要 `OPENAI_BASE_URL`。适配器将规则 finding 与必要证据打包，要求 JSON 对象，再用 Pydantic 解析；Diagnosis Engine 对 finding/evidence ID 做最终校验。兼容接口允许本机 HTTP，远程仅允许 HTTPS；密钥不保存到报告。缺对齐模型或对齐失败时使用 `NoAlignment`，并将依赖位置的指标标为不可用。OpenPronounce 失败只影响该词候选。LLM 失败回退规则。Anthropic、Gemini、Ollama/LM Studio 专用适配器和本地 ASR/LLM 仍是预留方向。
 
 ## 5. 内网部署边界
 

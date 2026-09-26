@@ -43,9 +43,9 @@ backend/.venv/bin/python -m pip install -r backend/requirements-llm.lock
 
 分析缺失可靠时间戳、语音活动区间或逐词颜色时会标记为部分完成。词速、停顿等指标会显示测量质量；重复、false starts、fillers 在猩际转写可能省略口误时显示“无法判断”。发音模型候选不能当作猩际或官方 PTE 评分。
 
-## 可选 OpenAI 配置
+## 可选 AI 文案改写
 
-在后端 `.env` 中填写 `OPENAI_API_KEY` 和 `OPENAI_ANALYSIS_MODEL`，安装 `backend/requirements-llm.lock`，然后在每次分析前显式勾选云端改写。ChatGPT Plus 与 OpenAI API 独立，项目需要单独的 API key；未配置时本机测量和规则建议仍可运行。密钥只由后端读取，前端只收到是否已配置。
+官方 OpenAI 和本机 CLIProxyAPI 都可改写有证据约束的训练建议。在项目根目录 `.env` 填写 Provider、`OPENAI_API_KEY`、`OPENAI_ANALYSIS_MODEL`；CLIProxyAPI 还需 `OPENAI_BASE_URL=http://127.0.0.1:8317/v1`。安装 `backend/requirements-llm.lock`，重启服务后，在具体分析前显式勾选 AI 改写。未勾选或未配置时仍运行本机测量与规则建议。密钥只由后端读取，不进入网页或报告；详细步骤见 [CONFIGURATION.md](docs/CONFIGURATION.md)。
 
 ## 内网访问
 

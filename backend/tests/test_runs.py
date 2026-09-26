@@ -68,6 +68,36 @@ def test_cloud_requires_explicit_key_and_model_without_leaking_key(tmp_path):
         assert "openai_api_key" not in client.get("/api/v1/settings/providers").text
 
 
+def test_compatible_provider_can_rewrite_findings_without_exposing_key(tmp_path, monkeypatch):
+    from app.providers.openai_llm import OpenAICompatibleLLMProvider
+
+    calls = []
+    def rewrite(self, findings, evidence):
+        calls.append((self.base_url, self.model, len(evidence)))
+        return [{"id": finding["id"], "evidence_ids": finding["evidence_ids"],
+                 "statement": finding["statement"], "recommendation": "请回听并重录。"} for finding in findings]
+
+    monkeypatch.setattr(OpenAICompatibleLLMProvider, "explain", rewrite)
+    settings = Settings(_env_file=None, pte_data_dir=tmp_path, alignment_provider="none",
+                        llm_provider="openai_compatible", openai_api_key="test-local-key",
+                        openai_analysis_model="gpt-6-sol", openai_base_url="http://localhost:8317/")
+    with TestClient(create_app(settings)) as client:
+        audio = client.post("/api/v1/assets/audio", files={"file": ("sample.wav", one_second_silence(), "audio/wav")}).json()
+        sides = [{"role": role, "audio_asset_id": audio["id"], "transcript_raw": "Hello there",
+                  "tokens": [{"index": 0, "surface": "Hello", "color": "red" if role == "user" else "green",
+                              "color_review_status": "confirmed"}, {"index": 1, "surface": "there"}]}
+                 for role in ("user", "benchmark")]
+        comparison = client.post("/api/v1/comparisons", json={"exercise": {"question_type": "DI"}, "samples": sides}).json()
+        response = client.post(f"/api/v1/comparisons/{comparison['id']}/runs", json={"allow_cloud": True})
+        assert response.status_code == 200, response.text
+        report = client.get(f"/api/v1/runs/{response.json()['run_id']}/report").json()
+        assert report["diagnosis"]["llm_status"] == "used"
+        assert report["config"]["llm_provider"] == "openai_compatible"
+        assert calls == [("http://localhost:8317/v1", "gpt-6-sol", 1)]
+        assert "test-local-key" not in client.get("/api/v1/settings/providers").text
+        assert "test-local-key" not in client.get(f"/api/v1/runs/{response.json()['run_id']}/report").text
+
+
 def test_screenshot_candidate_colors_enter_first_run_with_lower_quality(tmp_path):
     settings = Settings(_env_file=None, pte_data_dir=tmp_path, alignment_provider="none")
     with TestClient(create_app(settings)) as client:

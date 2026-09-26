@@ -70,6 +70,8 @@ def diagnose(user_pronunciation: dict, user_fluency: dict, comparison: dict,
                 candidate = by_id[finding["id"]]
                 if candidate["evidence_ids"] != finding["evidence_ids"]:
                     raise ValueError("llm_evidence_ids_mismatch")
+            for finding in findings:
+                candidate = by_id[finding["id"]]
                 finding["statement"] = candidate["statement"]
                 finding["recommendation"] = candidate["recommendation"]
             llm_status = "used"

@@ -19,14 +19,20 @@ HTTP Basic 在普通 HTTP 上不加密，因此只在**可信内网**使用。�
 
 ## 2. API key 与 AI 分析开关
 
-在项目根目录 `.env` 中填写：
+使用本机 CLIProxyAPI（当前监听 `http://127.0.0.1:8317/`）时，在项目根目录 `.env` 中填写：
 
 ```dotenv
-OPENAI_API_KEY=你的独立OpenAI_API密钥
-OPENAI_ANALYSIS_MODEL=你有权限使用的模型名
+LLM_PROVIDER=openai_compatible
+OPENAI_BASE_URL=http://127.0.0.1:8317/v1
+OPENAI_ANALYSIS_MODEL=gpt-6-sol
+OPENAI_API_KEY=你的CLIProxyAPI访问密钥
 ```
 
-然后按需安装 `backend/requirements-llm.lock`，重启服务，在具体比较页面勾选 **“允许 OpenAI 改写训练建议”** 再点击“开始分析”。这项选择随每次运行单独提交为 `allow_cloud=true`；默认不调用 OpenAI。OpenAI 仅接收规则诊断所需的证据和结论，用于文字改写，不重新打 PTE 分，也不生成 benchmark 音频。云端调用失败会回退本机规则建议。ChatGPT Plus 订阅不提供 OpenAI API key；API 按 OpenAI Platform 独立计费。前端只能读取“是否已配置”和模型名，看不到 key。不要给 key 添加 `VITE_` 前缀。
+本机 `.env` 的前三项已按上述值设置，**只缺访问密钥**。到 CLIProxyAPI 的配置中取得其服务端允许的 API key，直接填入本地 `.env` 的 `OPENAI_API_KEY=` 后面；不要把密钥发到聊天里，也不要给它加 `VITE_` 前缀。`gpt-6-sol` 是计划调用的模型 ID，需确实出现在该代理使用此密钥返回的 `/v1/models` 列表中。项目后端与代理在同一台 Mac 上，故应使用 `127.0.0.1`；内网浏览器无需直连 8317。
+
+后端虚拟环境已安装 `backend/requirements-llm.lock` 中的 OpenAI SDK；更换机器时按该文件安装。填好密钥后运行 `./scripts/restart.sh`，到比较页面勾选 **“允许 CLIProxyAPI 改写训练建议”** 再点击“开始分析”。该选择随每次运行单独提交为 `allow_cloud=true`；默认不调用代理。代理只接收规则结论和所需证据，用于文字改写，不重新打 PTE 分，也不生成 benchmark 音频。调用失败会回退本机规则建议，报告中的 `llm_status` 会显示 `fallback_to_rules`。前端只收到“密钥是否已配置”和模型名，看不到密钥。实际模型能否调用，仍取决于 CLIProxyAPI 的上游配置与授权。
+
+若改用官方 OpenAI API，把 `LLM_PROVIDER` 设为 `openai`，`OPENAI_BASE_URL` 留空，填写独立的 OpenAI Platform API key 和受支持模型，再重启服务。ChatGPT Plus 订阅不提供该 API key；OpenAI Platform 独立计费。
 
 当前 AI 高分录音必须**由用户在项目外先生成并上传**，随后分别填写其猩际 PTE 三项分数和逐词截图。截图自动识别实际转写，复制文本可选；提交前可编辑 OCR 结果。共同朗读稿可直接输入，或上传/粘贴完整英文朗读稿截图后编辑文字。项目没有内置语音合成。
 
@@ -45,16 +51,17 @@ OPENAI_ANALYSIS_MODEL=你有权限使用的模型名
 | `ALIGNMENT_PROVIDER` | `whisperx` 或 `none` | WhisperX CPU 词级对齐，或禁用。禁用/失败会降级时间相关结论。需先安装 `requirements-alignment.lock`。 |
 | `PRONUNCIATION_PROVIDER` | `none` | 保留的全局配置字段；安装 `requirements-pronunciation.lock` 后运行页默认勾选本地 OpenPronounce，可在单次运行中关闭。其音素候选未经校准，首次运行会下载本地模型，可能明显变慢。 |
 | `ASR_PROVIDER` | `none` | 预留字段；当前主流程从猩际截图 OCR 实际转写，不运行音频 ASR。 |
-| `LLM_PROVIDER` | `openai` | 预留 provider 名；当前真正的云端调用由每次运行的勾选决定，仅实现 OpenAI。 |
-| `OPENAI_API_KEY` | 空 | 后端 OpenAI API 密钥；空值时云端勾选不可用。 |
-| `OPENAI_ANALYSIS_MODEL` | 空 | API 模型名；与 key 同时设置后才可勾选。 |
+| `LLM_PROVIDER` | `openai`；本机为 `openai_compatible` | 选择官方 OpenAI Responses API 或兼容 Chat Completions 服务；每次运行仍需勾选。 |
+| `OPENAI_API_KEY` | 空 | 所选服务的后端访问密钥；本机代理使用 CLIProxyAPI 认可的密钥。空值时 AI 勾选不可用。 |
+| `OPENAI_ANALYSIS_MODEL` | 空；本机为 `gpt-6-sol` | 所选服务可用的模型 ID；需与 key 一同设置。 |
+| `OPENAI_BASE_URL` | 空；本机为 `http://127.0.0.1:8317/v1` | 仅兼容服务使用；允许本机 HTTP 或 HTTPS，自动补 `/v1`。不填时兼容 Provider 不可用。 |
 | `PTE_LAN_MODE` | `false` | `true` 时内网服务要求密码并提供构建后的网页；开发脚本强制关闭。 |
 | `PTE_LAN_BIND_IP` | `127.0.0.1`；本机配置 `192.168.5.14` | 监听的本机私有 IPv4；不允许公网地址或 `0.0.0.0`。 |
 | `PTE_LAN_PORT` | `8765` | 内网服务端口。 |
 | `PTE_LAN_USERNAME` | `pte` | 浏览器内网登录用户名。 |
 | `PTE_LAN_PASSWORD` | 空；本机已生成 | 内网密码，至少 16 字符；空或过短时内网服务拒绝启动。 |
 
-Anthropic、Gemini、OpenAI-compatible、Ollama/LM Studio、本地 ASR/本地 LLM 目前是扩展方向，**当前代码未实现这些 provider**，不要把名称写入 `.env` 期待生效。
+Anthropic、Gemini、Ollama/LM Studio 的专用适配器及本地 ASR/LLM 仍未实现；仅通用 OpenAI-compatible Chat Completions 路径可用于 CLIProxyAPI 等兼容服务。
 
 ## 4. 数据与安全操作
 
