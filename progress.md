@@ -70,3 +70,9 @@
 - 用户本地填写密钥后，CLIProxyAPI `/v1/models` 返回 13 个模型且包含 `gpt-6-sol`；项目用虚构证据完成一次真实 Chat Completions 改写，JSON 与证据 ID 校验通过。重启内网服务后 Provider 状态显示 key、模型和 base URL 均已配置；真实用户报告未用于此连通性测试。
 - 用户新建比较出现 HTTP 500。日志定位到 `sample_tokens.color_review_status` 的 SQLite CHECK：数据库虽登记了迁移 0005，但实际表仍只允许 `confirmed`/`unreviewed`。隔离 API 回归测试先稳定复现 500，再由迁移 0006 重建表并保留旧词记录。后端 **37 passed**。
 - 执行前将数据库在线备份到 Git 忽略的 `data/db/pte.sqlite3.pre-0006-20260926-191854.bak`。内网服务重启后，迁移 0006 已登记；回滚试写确认 `candidate` 可保存，原有 **394** 条词记录数量不变，`PRAGMA integrity_check=ok`。失败提交产生的上传资产未自动清理，避免误删用户仍可能重新使用的文件。
+
+## 2026-09-26：Choices of Lunch 的 AI 改写核对
+
+- 核查同题三份旧报告：未启用 AI 的一次与启用 CLIProxyAPI 的两次都锁定相同样本修订；词色、对齐和流利度测量相同，仅有一条红词练习结论。旧 AI 改写只轻微调整措辞，还遗漏了原结论的“8 个”，所以用户看不出明显效果。
+- 诊断层现在要求 AI 返回的 finding/证据 ID 和每个字段内的数字均保持不变，验证全部通过后才整体替换；否则回退本机规则。新报告保留改写前的 `rule_findings`，网页显示 CLIProxyAPI 实际使用状态并可展开原建议。Prompt 要求在已有证据允许时引用具体词面，使建议更可操作。
+- 用同一题真实证据重新运行，生成 `run_53e0dcdca4044d51af93858788772d68`，`llm_status=used`。新结论保留“8 个已复核红词”；建议具体提到 `buy`、`soon` 的短句练习。与未启用 AI 的报告使用相同修订，词色统计和流利度值一致。后端 **38 passed**，前端生产构建通过；旧报告保持原样。

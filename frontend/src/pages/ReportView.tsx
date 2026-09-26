@@ -84,8 +84,46 @@ function SharedWords({ report }: { report: Report }) {
   return <section className="panel"><h3 className="text-lg font-semibold">共享词 A/B</h3><p className="mt-1 text-sm text-slate-600">按共同朗读稿的位置比较同一词。未配对和尾部差异不自动算发音问题。</p><div className="mt-4 flex max-h-64 flex-wrap gap-2 overflow-auto">{report.comparison.shared_word_pairs.map((pair, index) => <div key={`${pair.user_index}-${pair.benchmark_index}-${index}`} className={`rounded-lg border border-slate-200 px-3 py-2 text-sm ${pair.user_color === 'red' ? 'bg-red-100' : pair.user_color === 'yellow' ? 'bg-amber-100' : ''}`}><strong>{pair.word}</strong><span className="ml-3 text-slate-600">我 {pair.user_color} · 高分 {pair.benchmark_color}</span></div>)}{!report.comparison.shared_word_pairs.length && <p className="text-slate-500">没有可比较的共享词。</p>}</div></section>
 }
 
+function TrainingPriorities({ report }: { report: Report }) {
+  const providerName = report.config?.llm_provider === 'openai_compatible' ? 'CLIProxyAPI' : 'OpenAI'
+  const status = report.diagnosis.llm_status
+  const origin = status === 'used' ? `${providerName} 已改写文字`
+    : status === 'unchanged' ? `${providerName} 已调用，文字未变化`
+    : status === 'fallback_to_rules' ? `${providerName} 结果未采用，已使用本机规则`
+    : '本机规则（未调用 AI）'
+  const originals = new Map(report.diagnosis.rule_findings?.map(item => [item.id, item]) || [])
+  return <section className="panel">
+    <h3 className="text-lg font-semibold">训练优先事项</h3>
+    <p className="mt-1 text-sm text-slate-600">由独立证据生成，最多三项。文字来源：{origin}。AI 不更改测量或评分。</p>
+    <div className="mt-4 space-y-4">
+      {report.diagnosis.findings.map((finding, index) => {
+        const original = originals.get(finding.id)
+        return <article key={finding.id} className="rounded-xl bg-indigo-50 p-4">
+          <div className="flex justify-between gap-3"><h4 className="font-semibold">{index + 1}. {finding.statement}</h4><span className="text-xs text-indigo-700">{finding.confidence_level}</span></div>
+          <p className="mt-2 text-sm text-slate-700">{finding.recommendation}</p>
+          <p className="mt-2 text-xs text-slate-500">证据 {finding.evidence_ids.length} 项 · {finding.limitations.join(' ')}</p>
+          {status === 'used' && original && <details className="mt-3 text-sm text-slate-600">
+            <summary className="cursor-pointer">查看改写前的本机建议</summary>
+            <p className="mt-2">问题：{original.statement}</p>
+            <p className="mt-1">建议：{original.recommendation}</p>
+          </details>}
+        </article>
+      })}
+      {!report.diagnosis.findings.length && <p className="text-slate-600">当前可用证据不足以生成训练结论。请先复核词色或检查对齐质量。</p>}
+    </div>
+  </section>
+}
+
 export default function ReportView({ report }: { report: Report }) {
   const [jumps, setJumps] = useState<Record<Role, { start: number; end?: number; nonce: number } | null>>({ user: null, benchmark: null })
   const jump = (role: Role, start: number, end?: number) => setJumps(previous => ({ ...previous, [role]: { start, end, nonce: Date.now() + Math.random() } }))
-  return <div className="space-y-6"><div className={`rounded-xl p-4 text-sm ${report.status === 'complete' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>报告状态：{report.status === 'complete' ? '完整' : '部分完成'}。低质量或缺失的测量不会被当作已证实的发音问题。</div><div className="grid gap-6 lg:grid-cols-2">{(['user', 'benchmark'] as const).map(role => <SidePanel key={role} role={role} side={report.samples[role]} report={report} jump={jumps[role]} setJump={value => setJumps(previous => ({ ...previous, [role]: value }))} />)}</div><TranscriptCoverage report={report} /><FluencyPanel report={report} /><SharedWords report={report} /><EvidenceTimeline report={report} setJump={jump} /><section className="panel"><h3 className="text-lg font-semibold">训练优先事项</h3><p className="mt-1 text-sm text-slate-600">由独立证据生成，最多三项。解释来源：{report.diagnosis.llm_status === 'used' ? 'OpenAI 辅助改写' : '本机规则'}。</p><div className="mt-4 space-y-4">{report.diagnosis.findings.map((finding, index) => <article key={finding.id} className="rounded-xl bg-indigo-50 p-4"><div className="flex justify-between gap-3"><h4 className="font-semibold">{index + 1}. {finding.statement}</h4><span className="text-xs text-indigo-700">{finding.confidence_level}</span></div><p className="mt-2 text-sm text-slate-700">{finding.recommendation}</p><p className="mt-2 text-xs text-slate-500">证据 {finding.evidence_ids.length} 项 · {finding.limitations.join(' ')}</p></article>)}{!report.diagnosis.findings.length && <p className="text-slate-600">当前可用证据不足以生成训练结论。请先复核词色或检查对齐质量。</p>}</div></section></div>
+  return <div className="space-y-6">
+    <div className={`rounded-xl p-4 text-sm ${report.status === 'complete' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>报告状态：{report.status === 'complete' ? '完整' : '部分完成'}。低质量或缺失的测量不会被当作已证实的发音问题。</div>
+    <div className="grid gap-6 lg:grid-cols-2">{(['user', 'benchmark'] as const).map(role => <SidePanel key={role} role={role} side={report.samples[role]} report={report} jump={jumps[role]} setJump={value => setJumps(previous => ({ ...previous, [role]: value }))} />)}</div>
+    <TranscriptCoverage report={report} />
+    <FluencyPanel report={report} />
+    <SharedWords report={report} />
+    <EvidenceTimeline report={report} setJump={jump} />
+    <TrainingPriorities report={report} />
+  </div>
 }

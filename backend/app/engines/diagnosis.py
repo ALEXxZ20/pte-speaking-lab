@@ -1,7 +1,13 @@
 """Cross-dimension rules only consume saved independent evidence."""
+from collections import Counter
+import re
 from uuid import uuid4
 
 VERSION = "diagnosis-v1"
+
+
+def _numbers(value: str) -> Counter[str]:
+    return Counter(re.findall(r"\d+(?:\.\d+)?", value))
 
 
 def _finding(kind: str, statement: str, recommendation: str, evidence_ids: list[str],
@@ -59,6 +65,8 @@ def diagnose(user_pronunciation: dict, user_fluency: dict, comparison: dict,
                                      "按意群重复录音，保持相近节奏；下次观察局部语速波动是否减小。", ids,
                                      limitations=["两侧表达内容不同；较稳不代表必须模仿对方语速。"] ))
     findings = findings[:3]
+    rule_findings = [{"id": finding["id"], "statement": finding["statement"],
+                      "recommendation": finding["recommendation"]} for finding in findings]
     llm_status = "disabled"
     if llm_provider and findings:
         try:
@@ -70,13 +78,19 @@ def diagnose(user_pronunciation: dict, user_fluency: dict, comparison: dict,
                 candidate = by_id[finding["id"]]
                 if candidate["evidence_ids"] != finding["evidence_ids"]:
                     raise ValueError("llm_evidence_ids_mismatch")
+                for field in ("statement", "recommendation"):
+                    if _numbers(candidate[field]) != _numbers(finding[field]):
+                        raise ValueError("llm_numbers_changed")
+            changed = any(by_id[finding["id"]][field] != finding[field]
+                          for finding in findings for field in ("statement", "recommendation"))
             for finding in findings:
                 candidate = by_id[finding["id"]]
                 finding["statement"] = candidate["statement"]
                 finding["recommendation"] = candidate["recommendation"]
-            llm_status = "used"
+            llm_status = "used" if changed else "unchanged"
         except Exception:
             llm_status = "fallback_to_rules"
     assert all(id in known for finding in findings for id in finding["evidence_ids"])
-    return {"rule_version": VERSION, "findings": findings, "llm_status": llm_status,
+    return {"rule_version": VERSION, "findings": findings, "rule_findings": rule_findings,
+            "llm_status": llm_status,
             "recommendations": [finding["recommendation"] for finding in findings]}

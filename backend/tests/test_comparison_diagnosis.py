@@ -73,3 +73,20 @@ def test_diagnosis_does_not_apply_partial_llm_edits_on_validation_failure():
     assert result["llm_status"] == "fallback_to_rules"
     assert len(result["findings"]) == 2
     assert all(finding["statement"] != "overwritten" for finding in result["findings"])
+
+
+def test_llm_rewrite_must_preserve_rule_numbers_and_expose_original_wording():
+    pronunciation = {"evidence": [{"id": f"red-{index}", "kind": "xingji_word_color",
+                                   "details": {"color": "red"}, "start_s": None, "end_s": None}
+                                  for index in range(8)]}
+    fluency = {"evidence": [], "metrics": {}}
+
+    class DropsCount:
+        def explain(self, findings, evidence):
+            return [{"id": findings[0]["id"], "evidence_ids": findings[0]["evidence_ids"],
+                     "statement": "有已复核红词，适合回听。", "recommendation": findings[0]["recommendation"]}]
+
+    result = diagnose(pronunciation, fluency, {"fluency_metric_differences": {}}, DropsCount())
+    assert result["llm_status"] == "fallback_to_rules"
+    assert "8" in result["findings"][0]["statement"]
+    assert result["rule_findings"][0]["statement"] == result["findings"][0]["statement"]
