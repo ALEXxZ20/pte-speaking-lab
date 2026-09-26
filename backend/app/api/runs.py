@@ -1,4 +1,5 @@
 import json
+import importlib.util
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -72,4 +73,5 @@ def provider_settings(request: Request) -> dict:
             "llm": settings.llm_provider,
             "openai_model": settings.openai_analysis_model or None,
             "openai_key_configured": bool(settings.openai_api_key.get_secret_value().strip()),
+            "openpronounce_available": importlib.util.find_spec("openpronounce") is not None,
             "cloud_requires_explicit_run_choice": True}

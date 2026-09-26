@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.screenshots.mapper import tokenize
 
 Color = Literal["red", "yellow", "green", "unknown"]
-Review = Literal["confirmed", "unreviewed"]
+Review = Literal["confirmed", "candidate", "unreviewed"]
 
 
 class Score(BaseModel):
@@ -44,7 +44,9 @@ class SampleInput(BaseModel):
     fluency_score: Score | None = None
     content_score: Score | None = None
     transcript_raw: str | None = None
-    transcript_source: Literal["xingji_copy", "manual_correction"] | None = None
+    transcript_source: Literal["xingji_copy", "manual_correction", "screenshot_ocr", "screenshot_ocr_edited"] | None = None
+    ocr_transcript_raw: str | None = None
+    copied_transcript_raw: str | None = None
     tokens: list[Token] = Field(default_factory=list)
     pause_labels: list[PauseLabel] = Field(default_factory=list)
 
@@ -63,8 +65,10 @@ class SampleInput(BaseModel):
             if actual.index != source["index"] or actual.surface != source["surface"]:
                 raise ValueError("token_order_does_not_match_transcript")
             actual.normalized = source["normalized"]
-            if actual.color != "unknown" and actual.color_review_status != "confirmed":
-                raise ValueError("color_requires_confirmation")
+            if actual.color != "unknown" and actual.color_review_status == "unreviewed":
+                raise ValueError("color_requires_review_or_candidate_source")
+            if actual.color_review_status == "candidate" and not actual.color_source_screenshot_id:
+                raise ValueError("candidate_requires_screenshot_source")
         if any(p.after_token_index is not None and not (0 <= p.after_token_index < len(expected)) for p in self.pause_labels):
             raise ValueError("pause_position_out_of_range")
         if len(set(self.color_screenshot_asset_ids)) != len(self.color_screenshot_asset_ids):
@@ -78,6 +82,9 @@ class ExerciseInput(BaseModel):
     source_note: str | None = None
     source_question_id: str | None = None
     reading_text_raw: str | None = None
+    reading_text_source: Literal["manual", "screenshot_ocr", "screenshot_ocr_edited"] | None = None
+    reading_text_ocr_raw: str | None = None
+    reading_screenshot_asset_id: str | None = None
 
 
 class ComparisonInput(BaseModel):

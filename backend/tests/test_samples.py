@@ -82,12 +82,15 @@ def test_deleting_comparison_preserves_shared_assets(tmp_path):
         picture = io.BytesIO()
         Image.new("RGB", (20, 20), "green").save(picture, format="PNG")
         screenshot_id = client.post("/api/v1/assets/screenshots", files={"file": ("sample.jpg", picture.getvalue(), "image/jpeg")}).json()["id"]
-        body = {"exercise": {"question_type": "DI"}, "samples": [
+        body = {"exercise": {"question_type": "DI", "reading_text_raw": "Hello there",
+                             "reading_text_source": "screenshot_ocr", "reading_text_ocr_raw": "Hello there",
+                             "reading_screenshot_asset_id": screenshot_id}, "samples": [
             {"role": role, "audio_asset_id": audio_id, "transcript_raw": "Hello there",
              "color_screenshot_asset_ids": [screenshot_id]} for role in ("user", "benchmark")
         ]}
         first = client.post("/api/v1/comparisons", json=body).json()["id"]
         second = client.post("/api/v1/comparisons", json=body).json()["id"]
+        assert client.get(f"/api/v1/comparisons/{first}").json()["exercise"]["reading_screenshot_asset_id"] == screenshot_id
         preview = client.get(f"/api/v1/comparisons/{first}/deletion-preview").json()
         assert preview["audio_file_count"] == 0 and preview["screenshot_file_count"] == 0
         assert client.delete(f"/api/v1/comparisons/{first}").json()["deleted"]

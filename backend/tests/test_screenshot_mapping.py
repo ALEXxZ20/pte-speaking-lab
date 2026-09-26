@@ -1,5 +1,5 @@
 from PIL import Image
-from app.screenshots.mapper import OCRWord, map_ocr_words, unique_ordered_matches
+from app.screenshots.mapper import OCRWord, extract_transcript_words, map_ocr_words, unique_ordered_matches
 
 
 def words(*texts):
@@ -39,3 +39,18 @@ def test_context_disambiguates_repeated_tokens():
 def test_sparse_unrelated_matches_do_not_receive_color():
     result = map_ocr_words('a different full sentence', words('a'), Image.new('RGB', (10, 10), (200, 20, 30)), 'image-3')
     assert result['candidate_count'] == 0
+
+
+def test_transcript_block_excludes_colored_header_and_footer():
+    image = Image.new('RGB', (400, 350), 'white')
+    words = [OCRWord('header', 90, (0, 0, 25, 10))]
+    for row in range(3):
+        for column, text in enumerate(('the', 'same', 'word', 'again')):
+            words.append(OCRWord(text, 90, (column * 45, 100 + row * 35, 30, 12)))
+    words.append(OCRWord('footer', 90, (0, 320, 25, 10)))
+    from PIL import ImageDraw
+    draw = ImageDraw.Draw(image)
+    for word in words:
+        draw.rectangle((word.bbox[0], word.bbox[1], word.bbox[0] + word.bbox[2], word.bbox[1] + word.bbox[3]), fill=(200, 20, 30))
+    extracted = extract_transcript_words(words, image)
+    assert [word.text for word in extracted] == ['the', 'same', 'word', 'again'] * 3

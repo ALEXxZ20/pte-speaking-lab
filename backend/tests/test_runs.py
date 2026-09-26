@@ -66,3 +66,49 @@ def test_cloud_requires_explicit_key_and_model_without_leaking_key(tmp_path):
         assert result.json()["detail"]["code"] == "openai_key_and_model_required"
         assert client.get(f"/api/v1/comparisons/{comparison['id']}/runs").json() == []
         assert "openai_api_key" not in client.get("/api/v1/settings/providers").text
+
+
+def test_screenshot_candidate_colors_enter_first_run_with_lower_quality(tmp_path):
+    settings = Settings(_env_file=None, pte_data_dir=tmp_path, alignment_provider="none")
+    with TestClient(create_app(settings)) as client:
+        audio = client.post("/api/v1/assets/audio", files={"file": ("sample.wav", one_second_silence(), "audio/wav")}).json()
+        from PIL import Image
+        import io
+        picture = io.BytesIO()
+        Image.new("RGB", (20, 20), "red").save(picture, format="PNG")
+        screenshot = client.post("/api/v1/assets/screenshots", files={"file": ("words.png", picture.getvalue(), "image/png")}).json()
+        sides = [{"role": role, "audio_asset_id": audio["id"], "color_screenshot_asset_ids": [screenshot["id"]],
+                  "transcript_raw": "Hello there", "transcript_source": "screenshot_ocr", "ocr_transcript_raw": "Hello there",
+                  "tokens": [{"index": 0, "surface": "Hello", "color": "red" if role == "user" else "green",
+                              "color_review_status": "candidate", "color_source_screenshot_id": screenshot["id"]},
+                             {"index": 1, "surface": "there"}]}
+                 for role in ("user", "benchmark")]
+        comparison = client.post("/api/v1/comparisons", json={"exercise": {"question_type": "DI",
+            "reading_text_raw": "Hello there", "reading_text_source": "screenshot_ocr",
+            "reading_text_ocr_raw": "Hello there", "reading_screenshot_asset_id": screenshot["id"]}, "samples": sides})
+        assert comparison.status_code == 200, comparison.text
+        run = client.post(f"/api/v1/comparisons/{comparison.json()['id']}/runs", json={})
+        assert run.status_code == 200, run.text
+        report = client.get(f"/api/v1/runs/{run.json()['run_id']}/report").json()
+        assert report["samples"]["user"]["pronunciation"]["summary"]["candidate_count"] == 1
+        assert report["samples"]["user"]["pronunciation"]["summary"]["unknown_count"] == 1
+        assert report["samples"]["user"]["pronunciation"]["evidence"][0]["quality"] == "low"
+        assert report["comparison"]["shared_word_pairs"][0]["user_color"] == "red"
+        assert report["diagnosis"]["findings"][0]["confidence_level"] == "low"
+        user = comparison.json()["samples"]["user"]
+        edited = user["sample"]
+        edited["tokens"][0]["color_review_status"] = "confirmed"
+        assert client.patch(f"/api/v1/samples/{user['id']}", json={"expected_version": 1, "sample": edited}).status_code == 200
+        old = client.get(f"/api/v1/runs/{run.json()['run_id']}/report").json()
+        assert old["samples"]["user"]["sample"]["tokens"][0]["color_review_status"] == "candidate"
+
+
+def test_openpronounce_availability_is_reported_without_starting_model(tmp_path, monkeypatch):
+    import app.api.runs as runs_api
+
+    original = runs_api.importlib.util.find_spec
+    with TestClient(create_app(Settings(_env_file=None, pte_data_dir=tmp_path))) as client:
+        monkeypatch.setattr(runs_api.importlib.util, "find_spec", lambda name: None if name == "openpronounce" else original(name))
+        assert client.get("/api/v1/settings/providers").json()["openpronounce_available"] is False
+        monkeypatch.setattr(runs_api.importlib.util, "find_spec", lambda name: object() if name == "openpronounce" else original(name))
+        assert client.get("/api/v1/settings/providers").json()["openpronounce_available"] is True

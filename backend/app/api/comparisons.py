@@ -7,7 +7,7 @@ from app.domain.schemas import ComparisonInput, SampleUpdate
 from app.persistence.database import connect
 from app.persistence.deletion import delete_comparison, preview_deletion
 from app.persistence.samples import create_comparison, get_comparison, list_history, now, uid, update_sample
-from app.screenshots.mapper import map_screenshot
+from app.screenshots.mapper import map_screenshot, preview_screenshot
 
 router = APIRouter(prefix="/api/v1", tags=["comparisons"])
 
@@ -67,6 +67,30 @@ def patch_sample(sample_id: str, body: SampleUpdate, request: Request) -> dict:
 
 class ImportRequest(BaseModel):
     screenshot_id: str
+
+
+class PreviewRequest(BaseModel):
+    kind: str = "xingji"
+    transcript_override: str | None = None
+
+
+@router.post("/screenshots/{screenshot_id}/preview")
+def preview(screenshot_id: str, body: PreviewRequest, request: Request) -> dict:
+    settings = request.app.state.settings
+    with connect(settings.database_path) as db:
+        row = db.execute("SELECT relative_path FROM screenshot_assets WHERE id=?", (screenshot_id,)).fetchone()
+    if not row:
+        problem("screenshot_not_found", 404)
+    path = settings.data_dir / row["relative_path"]
+    try:
+        result = preview_screenshot(path, screenshot_id, body.kind, transcript_override=body.transcript_override)
+        return result
+    except RuntimeError as exc:
+        if str(exc) == "screenshot_ocr_unavailable":
+            problem("screenshot_ocr_unavailable", 503)
+        raise
+    except ValueError as exc:
+        problem(str(exc))
 
 
 @router.post("/samples/{sample_id}/screenshot-imports")

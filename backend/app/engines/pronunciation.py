@@ -4,7 +4,7 @@ from typing import Protocol
 
 from app.engines.common import evidence
 
-VERSION = "pronunciation-v1"
+VERSION = "pronunciation-v2"
 
 
 class PronunciationProvider(Protocol):
@@ -15,22 +15,24 @@ class PronunciationProvider(Protocol):
 def analyze_pronunciation(sample_id: str, sample: dict, alignment: dict, wav_path: Path | None = None,
                           provider: PronunciationProvider | None = None, target_limit: int = 12) -> dict:
     tokens = sample["tokens"]
-    confirmed = [token for token in tokens if token["color_review_status"] == "confirmed" and token["color"] != "unknown"]
-    counts = {color: sum(token["color"] == color for token in confirmed) for color in ("red", "yellow", "green")}
+    known = [token for token in tokens if token["color_review_status"] in {"confirmed", "candidate"} and token["color"] != "unknown"]
+    counts = {color: sum(token["color"] == color for token in known) for color in ("red", "yellow", "green")}
     timed = {token["index"]: token for token in alignment.get("tokens", [])}
-    targets = sorted((token for token in confirmed if token["color"] in {"red", "yellow"}),
+    targets = sorted((token for token in known if token["color"] in {"red", "yellow"}),
                      key=lambda token: (0 if token["color"] == "red" else 1, token["index"]))[:target_limit]
     items = []
     color_evidence = {}
-    for token in confirmed:
+    for token in known:
         time = timed.get(token["index"], {})
         valid_time = time.get("quality") == "medium"
         start = time.get("start_s") if valid_time else None
         end = time.get("end_s") if valid_time else None
         color_ev = evidence(sample_id, "pronunciation", "xingji_word_color", "external",
-                            token.get("color_source_screenshot_id") or "xingji:manual", "high", VERSION,
+                            token.get("color_source_screenshot_id") or "xingji:manual",
+                            "high" if token["color_review_status"] == "confirmed" else "low", VERSION,
                             token_index=token["index"], start_s=start, end_s=end, value=None, unit=None,
-                            details={"surface": token["surface"], "color": token["color"], "timestamp_quality": time.get("quality", "unavailable")})
+                            details={"surface": token["surface"], "color": token["color"],
+                                     "review_status": token["color_review_status"], "timestamp_quality": time.get("quality", "unavailable")})
         items.append(color_ev)
         color_evidence[token["index"]] = color_ev["id"]
     output_targets = []
@@ -53,12 +55,14 @@ def analyze_pronunciation(sample_id: str, sample: dict, alignment: dict, wav_pat
             except Exception as exc:
                 target["provider_error"] = type(exc).__name__
         output_targets.append(target)
-    total = len(confirmed)
+    total = len(known)
+    candidate_count = sum(token["color_review_status"] == "candidate" for token in known)
     return {"dimension": "pronunciation", "algorithm_version": VERSION,
-            "status": "complete" if total else "partial",
-            "summary": {"counts": counts, "known_count": total, "unknown_count": len(tokens) - total,
+            "status": "complete" if total and not candidate_count else "partial",
+            "summary": {"counts": counts, "known_count": total, "candidate_count": candidate_count,
+                        "confirmed_count": total - candidate_count, "unknown_count": len(tokens) - total,
                         "ratios": {color: round(counts[color] / total, 4) if total else None for color in counts},
                         "xingji_score": sample.get("pronunciation_score"),
-                        "limitation": "Only confirmed Xingji colors are counted; word colors do not identify a phoneme error."},
+                        "limitation": "Screenshot candidates are included with low confidence until reviewed; word colors do not identify a phoneme error."},
             "targets": output_targets, "evidence": items,
             "provider": provider.name if provider else "none"}

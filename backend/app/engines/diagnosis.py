@@ -19,10 +19,11 @@ def diagnose(user_pronunciation: dict, user_fluency: dict, comparison: dict,
     findings = []
     red = [item for item in user_pronunciation["evidence"] if item["kind"] == "xingji_word_color" and item["details"]["color"] == "red"]
     if red:
-        findings.append(_finding("red_word_practice", f"猩际标出 {len(red)} 个已复核红词，适合优先回听。",
+        provisional = any(item["details"].get("review_status") == "candidate" for item in red)
+        findings.append(_finding("red_word_practice", f"截图识别出 {len(red)} 个红词候选，适合优先回听。" if provisional else f"猩际标出 {len(red)} 个已复核红词，适合优先回听。",
                                  "逐个回听红词所在短句，录制同一句两次，并观察下一次词色是否改善。",
-                                 [item["id"] for item in red[:5]], severity="high",
-                                 limitations=["颜色不能单独确定具体音素错误。"] ))
+                                 [item["id"] for item in red[:5]], severity="high", confidence="low" if provisional else "medium",
+                                 limitations=["截图词色尚待人工复核。" if provisional else "颜色不能单独确定具体音素错误。"] ))
     pauses = [item for item in user_fluency["evidence"] if item["kind"] == "pause_candidate" and item["quality"] == "medium"
               and item["value"] >= 500]
     associations = []

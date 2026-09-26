@@ -31,13 +31,17 @@ def _other_assets(db, excluded: set[str]) -> tuple[set[str], set[str]]:
 
 
 def _selection(db, comparison_id: str) -> dict | None:
-    row = db.execute("SELECT exercise_id,user_sample_id,benchmark_sample_id FROM comparisons WHERE id=?", (comparison_id,)).fetchone()
+    row = db.execute("SELECT c.exercise_id,c.user_sample_id,c.benchmark_sample_id,e.reading_screenshot_asset_id FROM comparisons c JOIN exercises e ON e.id=c.exercise_id WHERE c.id=?", (comparison_id,)).fetchone()
     if not row:
         return None
     sample_ids = [row["user_sample_id"], row["benchmark_sample_id"]]
     run_ids = [item["id"] for item in db.execute("SELECT id FROM analysis_runs WHERE comparison_id=?", (comparison_id,))]
     audio, screenshots = _candidate_assets(db, sample_ids)
+    if row["reading_screenshot_asset_id"]:
+        screenshots.add(row["reading_screenshot_asset_id"])
     other_audio, other_screenshots = _other_assets(db, set(sample_ids))
+    other_screenshots.update(item["reading_screenshot_asset_id"] for item in db.execute(
+        "SELECT reading_screenshot_asset_id FROM exercises WHERE id<>? AND reading_screenshot_asset_id IS NOT NULL", (row["exercise_id"],)))
     return {"exercise_id": row["exercise_id"], "sample_ids": sample_ids, "run_ids": run_ids,
             "delete_audio_ids": sorted(audio - other_audio),
             "delete_screenshot_ids": sorted(screenshots - other_screenshots),

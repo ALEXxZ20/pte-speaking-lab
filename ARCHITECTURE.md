@@ -51,7 +51,7 @@ class TokenInput:
     surface: str                # 保留原样、标点和大小写
     normalized: str             # 比较用；由后端生成
     color: Literal["red", "yellow", "green", "unknown"]
-    color_review_status: Literal["confirmed", "unreviewed"]
+    color_review_status: Literal["confirmed", "candidate", "unreviewed"]
     color_source_screenshot_id: str | None
 
 class PauseLabelInput:
@@ -68,7 +68,7 @@ class ResponseSample:
     fluency_score: Score | None
     content_score: Score | None
     transcript_raw: str | None  # 直接粘贴的猩际转写；分析前校验
-    transcript_source: Literal["xingji_copy", "manual_correction"] | None
+    transcript_source: Literal["xingji_copy", "manual_correction", "screenshot_ocr", "screenshot_ocr_edited"] | None
     tokens: list[TokenInput]
     pause_labels: list[PauseLabelInput]
 
@@ -76,11 +76,11 @@ class Exercise:
     reading_text_raw: str | None  # 两侧共同计划朗读的原文；旧记录可为空
 ```
 
-转写由用户直接从猩际复制粘贴，三项分数及量表由用户录入。截图只承担逐词红/黄/绿颜色及可见停顿标记的来源，不要求从截图重建完整转写或分数。先用真实用户/benchmark 截图验证词框/阅读顺序、颜色和停顿识别；可评估本机 macOS Vision OCR 辅助定位词，但 OCR 文字只用于与粘贴转写匹配。颜色分类仍需读取截图像素，不能假定 OCR 自带词色。匹配必须按词序处理重复词，遇到漏词、换行、标点或截图不完整时标记错位并交给用户复核，不能按相同词形随意配对。
+当前实现以截图 OCR 文字作为两侧转写默认草稿，复制的猩际文本可选并用于差异核对；三项分数及量表由用户录入。Tesseract 给出正文词框与词序，像素分类器给出红/黄/绿候选，正文区域排除页眉和评分杂字。共同计划朗读稿另可上传完整英文文本截图。编辑 OCR 稿后重新按词序映射颜色；重复词歧义、漏词、裁剪和低置信度保持 `unknown`。不把 OCR 文本标为复制的猩际原文。
 
-截图处理只产生标签映射草稿；逐词保留来源截图、坐标框、识别置信度和人工复核状态。低置信度颜色为 `unknown`，不能自动当作绿色。UI 并排显示原图、粘贴转写和候选颜色/停顿，允许逐词修改。支持多张截图覆盖一份转写，但必须检查重叠和缺页。可分析的转写来自已校验的粘贴文本；已复核的部分标签可用于对应词的统计。
+截图处理产生可编辑转写和标签映射草稿；逐词保留来源截图、坐标框、识别置信度和人工复核状态。低置信度颜色为 `unknown`，不能自动当作绿色。UI 并排显示原图、最终转写和候选颜色，允许逐词修改。截图候选以较低证据质量参与第一次统计与诊断；人工确认后提升证据质量。当前一侧支持一张整页截图。
 
-转写以粘贴内容为首要来源，颜色以截图经人工确认的映射为准。输入校验要求 token index 连续、词序与粘贴转写的可分析 token 一致；无法自动解析的标点/特殊符号进入人工修正，不静默挪动颜色。保留原始粘贴文本、原始截图、映射草稿和 `raw_payload_json`。`unknown` 允许存在，但必须给出“有多少词缺少颜色”的提示。相同词多次出现用 `(sample_id, token_index)` 唯一识别；运行时另绑定不可变 revision。
+转写以截图 OCR 后的可编辑文本为默认来源，复制文本仅是可选校对来源。输入校验要求 token index 连续、词序与最终文本一致；无法自动解析的标点/特殊符号进入人工修正，不静默挪动颜色。保存 OCR 草稿、可选复制文本、最终文本、原始截图和映射草稿。`unknown` 数量用红色感叹号提示。相同词多次出现用 `(sample_id, token_index)` 唯一识别；运行时绑定不可变 revision。
 
 音频只通过上传接口写入数据目录，数据库存相对路径。上传后用 ffprobe 校验实际编码、时长及采样率，不信任扩展名和 MIME。原始音频只读保存；衍生音频由 FFmpeg 生成，例如 16 kHz、单声道 PCM WAV，保留转码命令/版本/hash。所有位置使用相对于音频起点的秒数，区间统一半开 `[start_s, end_s)`。
 
@@ -232,7 +232,7 @@ CREATE TABLE sample_tokens (
   sample_id TEXT NOT NULL REFERENCES response_samples(id), token_index INTEGER NOT NULL,
   surface TEXT NOT NULL, normalized TEXT NOT NULL,
   color TEXT NOT NULL CHECK(color IN ('red','yellow','green','unknown')),
-  color_review_status TEXT NOT NULL CHECK(color_review_status IN ('confirmed','unreviewed')),
+  color_review_status TEXT NOT NULL CHECK(color_review_status IN ('confirmed','candidate','unreviewed')),
   color_source_screenshot_id TEXT REFERENCES screenshot_assets(id),
   PRIMARY KEY(sample_id, token_index)
 );
@@ -293,7 +293,8 @@ CREATE TABLE comparisons_result (
 | `GET /health` | API、数据库、FFmpeg、Provider 配置状态（不泄露密钥）。 |
 | `POST /assets/audio` | 上传并探测音频，返回 `audio_asset_id`。 |
 | `POST /assets/screenshots` | 上传猩际逐词颜色截图，校验格式/大小并保留原图，返回 asset ID。 |
-| `POST /samples/{id}/screenshot-imports` | 以样本中已粘贴转写为基准，从截图生成词序到颜色/停顿的映射草稿；返回坐标、置信度和错位提示。 |
+| `POST /screenshots/{id}/preview` | 提交前 OCR：猩际截图提取转写和词色；共同朗读稿截图提取可编辑文字；修改后的转写可重新映射。 |
+| `POST /samples/{id}/screenshot-imports` | 以样本中最终转写为基准，保存截图词色映射草稿；返回坐标、置信度和错位提示。 |
 | `POST /comparisons` | 创建 Exercise 与双边 ResponseSample 草稿；允许未填完字段，返回校验结果和 ID。 |
 | `GET /comparisons/{id}` | 读取输入与最近分析摘要。 |
 | `PATCH /samples/{id}` | 复核或修正 transcript、分数或标签，生成不可变 sample revision。 |

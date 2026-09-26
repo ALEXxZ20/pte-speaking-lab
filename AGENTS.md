@@ -12,7 +12,7 @@
 - Focus on Pronunciation and Fluency. Store and display Xingji Content scores, but do not implement independent Content scoring, image understanding, or semantic content diagnosis.
 - A comparison contains one user `ResponseSample` and one high-score benchmark `ResponseSample`. The benchmark is an example of high performance, not an official answer or scoring standard.
 - Preserve source audio, Xingji scores, transcripts, colors, and pause labels. Do not replace source facts with model output.
-- Xingji transcripts can be copied directly; word colors are available only in screenshots. Keep the pasted transcript and original images, map screenshot colors and visible pause marks to transcript token positions, and require review before using mapped labels. Screenshot OCR is only a matching aid; never replace the pasted transcript with it. Keep uncertain colors as unknown.
+- Xingji screenshots are the preferred input for observed transcript and word colors. Preserve the original image, OCR draft, optional copied transcript, final edited transcript, source labels, and immutable revisions. Include reliably mapped screenshot colors in the first analysis as low-confidence `candidate`; keep uncertain colors `unknown`. Human confirmation or correction changes the status to `confirmed` without rewriting old reports. Shared reading script screenshots are a separate source and must contain the full intended English text.
 - Never label an internally generated result as an official PTE or Xingji score.
 
 ## Analysis architecture

@@ -9,7 +9,7 @@ def _quality(alignment: dict, index: int) -> bool:
 
 
 def _color(token: dict) -> str:
-    return token["color"] if token["color_review_status"] == "confirmed" else "unknown"
+    return token["color"] if token["color_review_status"] in {"confirmed", "candidate"} else "unknown"
 
 
 def _ordered_matches(left: list[str], right: list[str]) -> list[tuple[int, int]]:

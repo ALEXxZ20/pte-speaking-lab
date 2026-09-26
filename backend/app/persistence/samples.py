@@ -57,8 +57,10 @@ def create_comparison(path, input_data: ComparisonInput) -> dict:
         for sample in input_data.samples:
             _assert_assets(db, sample)
         exercise = input_data.exercise
-        db.execute("INSERT INTO exercises (id,question_type,title,source_note,source_question_id,reading_text_raw,created_at) VALUES (?,?,?,?,?,?,?)",
-                   (exercise_id, exercise.question_type, exercise.title, exercise.source_note, exercise.source_question_id, exercise.reading_text_raw, now()))
+        if exercise.reading_screenshot_asset_id and not db.execute("SELECT 1 FROM screenshot_assets WHERE id=?", (exercise.reading_screenshot_asset_id,)).fetchone():
+            raise ValueError("reading_screenshot_asset_not_found")
+        db.execute("INSERT INTO exercises (id,question_type,title,source_note,source_question_id,reading_text_raw,reading_text_source,reading_text_ocr_raw,reading_screenshot_asset_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                   (exercise_id, exercise.question_type, exercise.title, exercise.source_note, exercise.source_question_id, exercise.reading_text_raw, exercise.reading_text_source, exercise.reading_text_ocr_raw, exercise.reading_screenshot_asset_id, now()))
         ids = {}
         for sample in input_data.samples:
             sample_id = uid("sample")
@@ -87,7 +89,7 @@ def update_sample(path, sample_id: str, expected_version: int, sample: SampleInp
 
 def get_comparison(path, comparison_id: str) -> dict | None:
     with connect(path) as db:
-        row = db.execute("SELECT c.*,e.question_type,e.title,e.source_note,e.source_question_id,e.reading_text_raw FROM comparisons c JOIN exercises e ON e.id=c.exercise_id WHERE c.id=?", (comparison_id,)).fetchone()
+        row = db.execute("SELECT c.*,e.question_type,e.title,e.source_note,e.source_question_id,e.reading_text_raw,e.reading_text_source,e.reading_text_ocr_raw,e.reading_screenshot_asset_id FROM comparisons c JOIN exercises e ON e.id=c.exercise_id WHERE c.id=?", (comparison_id,)).fetchone()
         if not row:
             return None
         samples = {}
@@ -97,7 +99,7 @@ def get_comparison(path, comparison_id: str) -> dict | None:
             samples[role] = {"id": sample_id, "version": sample_row["input_version"], "revision_id": revision["id"],
                              "sample": json.loads(sample_row["input_payload_json"])}
         return {"id": comparison_id, "exercise_id": row["exercise_id"],
-                "exercise": {k: row[k] for k in ("question_type", "title", "source_note", "source_question_id", "reading_text_raw")},
+                "exercise": {k: row[k] for k in ("question_type", "title", "source_note", "source_question_id", "reading_text_raw", "reading_text_source", "reading_text_ocr_raw", "reading_screenshot_asset_id")},
                 "created_at": row["created_at"], "samples": samples}
 
 
