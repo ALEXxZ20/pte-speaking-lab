@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { Evidence, Report, SideResult } from '../api/client'
 import { Waveform } from '../components/Waveform'
 
@@ -27,10 +27,13 @@ function SidePanel({ side, role, report, jump, setJump }: { side: SideResult; ro
 }
 
 function EvidenceTimeline({ report, setJump }: { report: Report; setJump: (role: Role, start: number, end?: number) => void }) {
-  const entries: { role: Role; item: Evidence }[] = (['user', 'benchmark'] as const).flatMap(role =>
+  const listRef = useRef<HTMLDivElement>(null)
+  const [focused, setFocused] = useState(true)
+  const allEvidence: { role: Role; item: Evidence }[] = (['user', 'benchmark'] as const).flatMap(role =>
     [...report.samples[role].pronunciation.evidence, ...report.samples[role].fluency.evidence]
-      .filter(item => item.start_s !== null && item.start_s !== undefined)
       .map(item => ({ role, item })))
+  const entries = allEvidence.filter(({ item }) => item.start_s !== null && item.start_s !== undefined)
+  const untimedCount = allEvidence.length - entries.length
   const highlightColor = ({ role, item }: { role: Role; item: Evidence }) =>
     role === 'user' && item.kind === 'xingji_word_color' && (item.details.color === 'red' || item.details.color === 'yellow')
       ? String(item.details.color) : null
@@ -48,19 +51,49 @@ function EvidenceTimeline({ report, setJump }: { report: Report; setJump: (role:
     if (item.kind.startsWith('metric_')) return `流利度指标：${metricNames[item.kind.slice(7)] || item.kind.slice(7)}`
     return item.kind
   }
+  const pairByUserIndex = new Map(report.comparison.shared_word_pairs.map(pair => [pair.user_index, pair]))
+  const focusTokens = report.samples.user.sample.tokens.filter(token =>
+    (token.color_review_status === 'confirmed' || token.color_review_status === 'candidate') &&
+    (token.color === 'red' || token.color === 'yellow'))
+  const context = (role: Role, index: number) => {
+    const side = report.samples[role]
+    const tokens = side.sample.tokens.slice(Math.max(0, index - 3), index + 4)
+    const timed = tokens.map(token => side.alignment.tokens.find(time => time.index === token.index))
+      .filter(time => time?.quality === 'medium' && time.start_s !== null && time.end_s !== null)
+    const targetTime = side.alignment.tokens.find(time => time.index === index)
+    const playable = targetTime?.quality === 'medium' && targetTime.start_s !== null && targetTime.end_s !== null
+    const start = timed.length ? Math.max(0, timed[0]!.start_s! - 0.2) : 0
+    const end = timed.length ? timed[timed.length - 1]!.end_s! + 0.2 : undefined
+    return <div className="rounded-lg bg-white/80 p-3">
+      <p className="text-xs font-semibold text-slate-600">{names[role]} · {playable ? `${targetTime.start_s!.toFixed(2)}s` : '时间定位不可靠'}</p>
+      <p className="mt-1 text-sm leading-7">{tokens.map(token => <span key={token.index} className={token.index === index ? 'rounded bg-indigo-100 px-1 font-semibold text-indigo-900' : ''}>{token.surface}{' '}</span>)}</p>
+      <button type="button" className="mt-2 text-sm font-medium text-indigo-700 underline disabled:text-slate-400" disabled={!playable || end === undefined} onClick={() => setJump(role, start, end)}>回听这段上下文</button>
+    </div>
+  }
   entries.sort((a, b) => (a.item.start_s || 0) - (b.item.start_s || 0))
   return <section className="panel">
     <h3 className="text-lg font-semibold">证据时间轴</h3>
-    <p className="mt-1 text-sm text-slate-600">按录音时间查看两侧证据；我的红词和黄词用对应颜色标出。点击证据回听。证据可信度描述来源可靠程度，不是发音分数。</p>
-    <div className="mt-4 max-h-80 space-y-2 overflow-auto">
-      {entries.slice(0, 120).map(({ role, item }) => {
+    <p className="mt-1 text-sm text-slate-600">{focused ? `优先查看我的 ${focusTokens.length} 个红黄词及前后各 3 个词；有共同朗读稿配对时显示 AI 同词及上下文。` : `按录音时间查看全部 ${entries.length} 条可定位证据；我的红词和黄词用对应颜色标出。点击证据回听。证据可信度描述来源可靠程度，不是发音分数。`}{untimedCount > 0 && `另有 ${untimedCount} 条证据没有可靠时间戳，无法精确定位。`}</p>
+    <button type="button" aria-pressed={focused} className="mt-3 rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-700" onClick={() => { setFocused(value => !value); listRef.current?.scrollTo({ top: 0 }) }}>{focused ? '显示全部证据' : '只看红黄词与上下文'}</button>
+    {(focused ? focusTokens.length : entries.length) > 0 && <button type="button" className="ml-4 mt-2 text-sm font-medium text-indigo-700 underline" onClick={() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })}>跳到录音尾部</button>}
+    <div ref={listRef} className="mt-4 max-h-80 space-y-2 overflow-auto">
+      {focused ? focusTokens.map(token => {
+        const pair = pairByUserIndex.get(token.index)
+        const signals = report.samples.user.pronunciation.evidence.filter(item => item.token_index === token.index && item.kind === 'phoneme_model_candidate')
+        return <article key={token.index} className={`rounded-lg p-3 ${colorStyles[token.color]}`}>
+          <p className="font-semibold">我的{token.color === 'red' ? '红' : '黄'}词：{token.surface}{token.color_review_status === 'candidate' && '（截图候选）'}</p>
+          {signals.length > 0 && <p className="mt-1 text-xs">OpenPronounce 音素模型线索（未经校准）</p>}
+          <div className="mt-2 grid gap-2 md:grid-cols-2">{context('user', token.index)}{pair ? context('benchmark', pair.benchmark_index) : <p className="rounded-lg bg-white/80 p-3 text-sm text-slate-600">这处词没有可靠配对的 AI 同词录音。</p>}</div>
+        </article>
+      }) : entries.map(({ role, item }) => {
         const color = highlightColor({ role, item })
         return <button key={item.id} type="button" className={`flex w-full items-center justify-between gap-3 rounded-lg p-3 text-left text-sm hover:ring-2 hover:ring-indigo-200 ${color ? colorStyles[color] : 'bg-slate-50'}`} onClick={() => setJump(role, Math.max(0, (item.start_s || 0) - 0.15), (item.end_s || item.start_s || 0) + 0.15)}>
           <span><strong>{names[role]}</strong> · {labelFor(role, item)}</span>
           <span className="shrink-0 text-slate-500">{item.start_s?.toFixed(2)}s · 证据可信度：{qualityNames[item.quality] || '未知'}</span>
         </button>
       })}
-      {!entries.length && <p className="text-sm text-slate-500">暂无可信时间定位证据。</p>}
+      {focused && !focusTokens.length && <p className="text-sm text-slate-500">没有可聚焦的红黄词；可切换到全部证据。</p>}
+      {!focused && !entries.length && <p className="text-sm text-slate-500">暂无可信时间定位证据。</p>}
     </div>
   </section>
 }
