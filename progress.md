@@ -52,3 +52,9 @@
 ## 开发检查
 
 在项目根目录运行 `backend/.venv/bin/python -m pytest backend/tests -q -p no:cacheprovider`：**28 passed**。运行 `npm run build --prefix frontend`：**通过**。本地 `data/`、`.env`、`测试数据包/` 和依赖目录均被 `.gitignore` 排除。
+
+## 2026-09-26：内网分析报错与证据名称修正
+
+- 用户在内网比较页重新分析时收到 `503/local_dependency_missing`。用同一比较的受密码保护 API 稳定复现；关闭 OpenPronounce 后仍失败。健康检查显示 `ffmpeg`、`ffprobe` 都为 `missing`，但 Homebrew 安装与原始录音文件均存在。根因是 macOS `launchd` 服务未继承终端中的 Homebrew 路径。
+- `scripts/start.sh` 现为后台服务显式设置包含 Homebrew 的 `PATH`，启动前检查两项音频工具。在不含 Homebrew 的调用方 `PATH` 下重启成功，健康检查两项均为 `ok`；原比较重新分析返回 HTTP 200、报告状态 `partial`，不再触发 503。分析仍为部分完成是候选证据与部分时间戳质量限制，不是此报错。
+- 证据时间轴把 `the · red`、`phoneme_model_candidate` 和 `high/low` 等内部名称改成中文词色、OpenPronounce 音素模型线索与“证据可信度”。音素线索未经校准，证据可信度不等于发音分数；时间轴继续按录音时间排列，仅给用户红黄词上色。

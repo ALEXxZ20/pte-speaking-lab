@@ -11,6 +11,8 @@
 
 `./scripts/start.sh` 后台启动，`./scripts/stop.sh` 停止，`./scripts/restart.sh` 重启；服务由 macOS `launchd` 托管，命令结束后仍运行。需要前台查看日志时可运行 `./scripts/serve_lan.sh`。Mac 休眠或退出服务后其他设备无法访问。浏览器会弹出登录框，用户名默认为 `pte`，密码在项目根目录 `.env` 的 `PTE_LAN_PASSWORD`。此密码已随机生成；不要发送完整 `.env` 给别人。给他人密码时应采用可信渠道。
 
+内网启动脚本会把 Homebrew 常用目录加入后台服务的 `PATH`，并在启动前检查 `FFMPEG_BIN`、`FFPROBE_BIN`。若 FFmpeg 装在其他位置，可在 `.env` 为这两项填写可执行文件的绝对路径。打开 `/api/v1/health` 时，`ffmpeg` 与 `ffprobe` 都应为 `ok`；否则分析可能提示缺少本地音频工具。
+
 当前 Mac 的 `en0` 地址是 `192.168.5.14/24`；该地址已用于启动服务并通过本机地址测试。**“当前地址”尚不等于永久固定地址。** 在路由器的 DHCP 地址保留/静态租约界面，将这台 Mac 的当前 Wi-Fi MAC `5a:34:e3:ba:fb:f8` 绑定到 `192.168.5.14`；若启用 macOS 私有 Wi-Fi 地址，网络重连或更换网络时 MAC 可能变化，应在目标网络确认后再绑定。路由器操作完成后重新检查 `ifconfig en0`，并用同一 Wi-Fi 中另一台设备打开内网 URL。若 IP 改变，更新 `PTE_LAN_BIND_IP` 后重启。路由器的客户端隔离、防火墙或访客网络可能阻止互访；不要做公网端口转发。
 
 HTTP Basic 在普通 HTTP 上不加密，因此只在**可信内网**使用。若要通过不可信 Wi-Fi 或互联网访问，应先配置 HTTPS 反向代理或 VPN。当前所有知道密码的访问者共用同一数据库和文件，没有个人数据隔离。

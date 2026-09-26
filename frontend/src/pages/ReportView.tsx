@@ -27,10 +27,42 @@ function SidePanel({ side, role, report, jump, setJump }: { side: SideResult; ro
 }
 
 function EvidenceTimeline({ report, setJump }: { report: Report; setJump: (role: Role, start: number, end?: number) => void }) {
-  const entries: { role: Role; item: Evidence }[] = (['user', 'benchmark'] as const).flatMap(role => [...report.samples[role].pronunciation.evidence, ...report.samples[role].fluency.evidence].filter(item => item.start_s !== null && item.start_s !== undefined).map(item => ({ role, item })))
-  const highlightColor = ({ role, item }: { role: Role; item: Evidence }) => role === 'user' && item.kind === 'xingji_word_color' && (item.details.color === 'red' || item.details.color === 'yellow') ? String(item.details.color) : null
+  const entries: { role: Role; item: Evidence }[] = (['user', 'benchmark'] as const).flatMap(role =>
+    [...report.samples[role].pronunciation.evidence, ...report.samples[role].fluency.evidence]
+      .filter(item => item.start_s !== null && item.start_s !== undefined)
+      .map(item => ({ role, item })))
+  const highlightColor = ({ role, item }: { role: Role; item: Evidence }) =>
+    role === 'user' && item.kind === 'xingji_word_color' && (item.details.color === 'red' || item.details.color === 'yellow')
+      ? String(item.details.color) : null
+  const wordFor = (role: Role, item: Evidence) =>
+    typeof item.token_index === 'number' ? report.samples[role].sample.tokens[item.token_index]?.surface : undefined
+  const labelFor = (role: Role, item: Evidence) => {
+    if (item.kind === 'xingji_word_color') {
+      const color = { red: '红色', yellow: '黄色', green: '绿色' }[String(item.details.color)] || '未知颜色'
+      const source = item.details.review_status === 'candidate' ? '截图候选' : '已确认'
+      return `词色：${item.details.surface || wordFor(role, item) || '词'} · ${color}（${source}）`
+    }
+    if (item.kind === 'phoneme_model_candidate') return `OpenPronounce 音素模型线索：${wordFor(role, item) || '目标词'}（未经校准）`
+    if (item.kind === 'speech_window') return '发声时段'
+    if (item.kind === 'pause_candidate') return '停顿候选'
+    if (item.kind.startsWith('metric_')) return `流利度指标：${metricNames[item.kind.slice(7)] || item.kind.slice(7)}`
+    return item.kind
+  }
   entries.sort((a, b) => (a.item.start_s || 0) - (b.item.start_s || 0))
-  return <section className="panel"><h3 className="text-lg font-semibold">证据时间轴</h3><p className="mt-1 text-sm text-slate-600">按录音时间查看两侧证据；我的红词和黄词用对应颜色标出。点击证据回听；“低质量”只作核查线索。</p><div className="mt-4 max-h-80 space-y-2 overflow-auto">{entries.slice(0, 120).map(({ role, item }) => <button key={item.id} type="button" className={`flex w-full items-center justify-between gap-3 rounded-lg p-3 text-left text-sm hover:ring-2 hover:ring-indigo-200 ${highlightColor({ role, item }) ? colorStyles[highlightColor({ role, item })!] : 'bg-slate-50'}`} onClick={() => setJump(role, Math.max(0, (item.start_s || 0) - 0.15), (item.end_s || item.start_s || 0) + 0.15)}><span><strong>{names[role]}</strong> · {item.kind === 'xingji_word_color' ? `${item.details.surface || '词'} · ${item.details.color || ''}${item.details.review_status === 'candidate' ? '（截图候选）' : ''}` : item.kind === 'pause_candidate' ? '停顿候选' : item.kind}</span><span className="shrink-0 text-slate-500">{item.start_s?.toFixed(2)}s · {item.quality}</span></button>)}{!entries.length && <p className="text-sm text-slate-500">暂无可信时间定位证据。</p>}</div></section>
+  return <section className="panel">
+    <h3 className="text-lg font-semibold">证据时间轴</h3>
+    <p className="mt-1 text-sm text-slate-600">按录音时间查看两侧证据；我的红词和黄词用对应颜色标出。点击证据回听。证据可信度描述来源可靠程度，不是发音分数。</p>
+    <div className="mt-4 max-h-80 space-y-2 overflow-auto">
+      {entries.slice(0, 120).map(({ role, item }) => {
+        const color = highlightColor({ role, item })
+        return <button key={item.id} type="button" className={`flex w-full items-center justify-between gap-3 rounded-lg p-3 text-left text-sm hover:ring-2 hover:ring-indigo-200 ${color ? colorStyles[color] : 'bg-slate-50'}`} onClick={() => setJump(role, Math.max(0, (item.start_s || 0) - 0.15), (item.end_s || item.start_s || 0) + 0.15)}>
+          <span><strong>{names[role]}</strong> · {labelFor(role, item)}</span>
+          <span className="shrink-0 text-slate-500">{item.start_s?.toFixed(2)}s · 证据可信度：{qualityNames[item.quality] || '未知'}</span>
+        </button>
+      })}
+      {!entries.length && <p className="text-sm text-slate-500">暂无可信时间定位证据。</p>}
+    </div>
+  </section>
 }
 
 function TranscriptCoverage({ report }: { report: Report }) {

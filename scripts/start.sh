@@ -42,16 +42,27 @@ fi
 rm -f "$PID_FILE"
 PYTHONPATH=backend backend/.venv/bin/python - "$PLIST_FILE" "$ROOT" "$LOG_FILE" <<'PY'
 import plistlib
+import os
+import shutil
 import sys
 from pathlib import Path
+from app.config import Settings
 
 path, root, log = sys.argv[1:]
+search_paths = ["/opt/homebrew/bin", "/usr/local/bin", *os.environ.get("PATH", "").split(os.pathsep),
+                "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+effective_path = os.pathsep.join(dict.fromkeys(item for item in search_paths if item))
+settings = Settings()
+for label, binary in (("FFMPEG_BIN", settings.ffmpeg_bin), ("FFPROBE_BIN", settings.ffprobe_bin)):
+    if shutil.which(binary, path=effective_path) is None:
+        raise SystemExit(f"找不到 {label}={binary}；请先用 Homebrew 安装 ffmpeg，或在 .env 配置绝对路径。")
 payload = {
     "Label": "com.pte-speaking-lab.lan",
     "ProgramArguments": [str(Path(root, "backend/.venv/bin/python")), str(Path(root, "scripts/serve_lan.py"))],
     "WorkingDirectory": root,
     "RunAtLoad": True,
     "KeepAlive": False,
+    "EnvironmentVariables": {"PATH": effective_path},
     "StandardOutPath": log,
     "StandardErrorPath": log,
 }
