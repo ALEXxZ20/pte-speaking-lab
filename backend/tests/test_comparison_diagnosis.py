@@ -1,4 +1,4 @@
-from app.comparison.service import shared_pairs
+from app.comparison.service import _pair_indices, shared_pairs
 from app.engines.diagnosis import diagnose
 from app.engines.fluency import analyze_fluency
 from app.engines.pronunciation import analyze_pronunciation
@@ -16,6 +16,24 @@ def test_shared_words_only_and_repeated_instances_are_unique():
     assert [pair["word"] for pair in pairs] == ["the", "chart"]
     assert len({pair["user_index"] for pair in pairs}) == len(pairs)
     assert all(pair["word"] != "falls" for pair in pairs)
+
+
+def test_shared_script_pairs_occurrences_and_reports_tail_without_attribution():
+    def observed(words):
+        return {"tokens": [{"normalized": word} for word in words.split()]}
+
+    pairs, summary = _pair_indices(observed("the chart rises"), observed("the chart rises then falls"),
+                                   "the chart rises then falls")
+    assert pairs == [(0, 0), (1, 1), (2, 2)]
+    assert summary["user_script_tail_unobserved"] == 2
+    assert summary["benchmark_script_tail_unobserved"] == 0
+    assert "pronunciation" in summary["limitation"]
+
+    pairs, summary = _pair_indices(observed("the red the line"), observed("the blue the line"),
+                                   "the red the line")
+    assert pairs == [(0, 0), (2, 2), (3, 3)]
+    assert summary["user_unmatched_transcript_words"] == 0
+    assert summary["benchmark_unmatched_transcript_words"] == 1
 
 
 def test_diagnosis_rejects_invented_evidence_and_falls_back():

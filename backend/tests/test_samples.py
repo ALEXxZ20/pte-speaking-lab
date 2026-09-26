@@ -41,9 +41,13 @@ def test_assets_dual_sample_and_immutable_revisions(tmp_path):
              "content_score": {"value": 5, "max": 5}}
             for role in ("user", "benchmark")
         ]
-        created = client.post("/api/v1/comparisons", json={"exercise": {"question_type": "DI"}, "samples": samples})
+        samples[0]["audio_origin"] = "human_recording"
+        samples[1]["audio_origin"] = "ai_generated"
+        created = client.post("/api/v1/comparisons", json={"exercise": {"question_type": "DI", "reading_text_raw": "One two."}, "samples": samples})
         assert created.status_code == 200, created.text
         comparison = created.json()
+        assert comparison["exercise"]["reading_text_raw"] == "One two."
+        assert comparison["samples"]["benchmark"]["sample"]["audio_origin"] == "ai_generated"
         assert set(comparison["samples"]) == {"user", "benchmark"}
         assert len(client.get("/api/v1/history").json()) == 1
         user = comparison["samples"]["user"]

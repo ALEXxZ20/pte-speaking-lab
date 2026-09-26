@@ -37,6 +37,7 @@ class PauseLabel(BaseModel):
 
 class SampleInput(BaseModel):
     role: Literal["user", "benchmark"]
+    audio_origin: Literal["human_recording", "ai_generated", "legacy_unspecified"] = "legacy_unspecified"
     audio_asset_id: str | None = None
     color_screenshot_asset_ids: list[str] = Field(default_factory=list)
     pronunciation_score: Score | None = None
@@ -49,6 +50,10 @@ class SampleInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_tokens(self):
+        if self.role == "user" and self.audio_origin == "ai_generated":
+            raise ValueError("user_audio_cannot_be_ai_generated")
+        if self.role == "benchmark" and self.audio_origin == "human_recording":
+            raise ValueError("benchmark_audio_must_be_ai_generated")
         expected = tokenize(self.transcript_raw or "")
         if not self.tokens and expected:
             self.tokens = [Token(index=t["index"], surface=t["surface"], normalized=t["normalized"]) for t in expected]
@@ -72,6 +77,7 @@ class ExerciseInput(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     source_note: str | None = None
     source_question_id: str | None = None
+    reading_text_raw: str | None = None
 
 
 class ComparisonInput(BaseModel):

@@ -3,14 +3,16 @@
 **版本：** MVP v0.1 · **日期：** 2026-09-26<br>
 **产品范围：** 见 [PROJECT_SPEC.md](PROJECT_SPEC.md)。本文件中的阈值和算法口径是 MVP 初始配置，须随分析记录版本化；它们不是 PTE 官方评分规则。
 
+**当前代码实现与本设计蓝图的差异以 [TECHNICAL_ARCHITECTURE.md](docs/TECHNICAL_ARCHITECTURE.md) 为准。** 当前输入是共同朗读原文、用户真人录音，以及用户上传的 AI 生成高分录音；两侧各保留独立猩际实际转写、截图和分数。内网部署配置见 [CONFIGURATION.md](docs/CONFIGURATION.md)。
+
 ## 1. 架构约束与决策
 
 | 决策 | MVP 实现 | 原因 |
 |---|---|---|
-| 部署 | 单机 macOS；前端本地网页、后端本地进程 | 适合 M2/24 GB，迁移到 M5 Pro/48 GB 不改业务结构。 |
+| 部署 | 单机 macOS 开发或受密码保护的可信内网访问 | 适合 M2/24 GB，迁移到 M5 Pro/48 GB 不改业务结构。 |
 | 前端 | React + Vite + Tailwind + WaveSurfer | 表单、时间轴和片段回放。 |
 | 后端 | FastAPI + SQLite + 本地 filesystem + FFmpeg/ffprobe | 持久化与可复算音频预处理，避免额外服务。 |
-| 数据源 | 双边 ResponseSample；直接获取的猩际转写、录入的分数、颜色截图和复核后的词级标签 | 分别保留原始来源与修订历史，不尝试重建猩际评分。 |
+| 数据源 | 共同朗读原文 + 双边 ResponseSample；用户真人录音与已生成 AI 参考录音各自的猩际转写、分数、颜色截图和复核后的词级标签 | 分别保留原始来源与修订历史，不尝试重建猩际评分。 |
 | 分析 | Pronunciation 与 Fluency 独立运行；Diagnosis 最后融合 | 可以单独验证、单独失败与重跑。 |
 | AI | OpenAI 先实现，Provider 契约隔离 | 后续可替换云端或本地实现。 |
 | Content | 仅存储猩际值/量表 | 防止需求蔓延和误称自行评分。 |
@@ -34,7 +36,7 @@ React UI ──HTTP──> FastAPI
 
 共享依赖只包括不可变的 `PreparedSample`：音频元数据、原始/规范化转写、token、语音区间和有质量标记的词时间戳。发音引擎不得读取流利度结果；流利度引擎不得读取发音结果。ComparisonService 接收两侧同一维度结果；DiagnosisEngine 才能同时读取两种 Evidence。Content 分不进入两个引擎的判定条件。
 
-分析采用持久化 `analysis_run` 状态机：`queued → preprocessing → aligning → analyzing → comparing → diagnosing → completed`，任一步可转 `partial` 或 `failed`。MVP 用本地进程内后台任务和 SQLite 状态记录；进程重启后未完成运行标记为 interrupted，允许重新发起。避免把长任务绑在 HTTP 请求上。若以后并发增加再换独立队列。
+当前代码以同步请求执行分析，运行记录为 `running → complete/partial/failed`；长任务会占用该请求直到完成。后台任务队列、细粒度状态和进程中断恢复属于后续扩展。
 
 ## 3. 输入与数据合同
 
@@ -59,6 +61,7 @@ class PauseLabelInput:
 
 class ResponseSample:
     role: Literal["user", "benchmark"]
+    audio_origin: Literal["human_recording", "ai_generated", "legacy_unspecified"]
     audio_asset_id: str | None   # 草稿可空；分析时必须有音频
     color_screenshot_asset_ids: list[str]  # 逐词颜色原图
     pronunciation_score: Score | None
@@ -68,6 +71,9 @@ class ResponseSample:
     transcript_source: Literal["xingji_copy", "manual_correction"] | None
     tokens: list[TokenInput]
     pause_labels: list[PauseLabelInput]
+
+class Exercise:
+    reading_text_raw: str | None  # 两侧共同计划朗读的原文；旧记录可为空
 ```
 
 转写由用户直接从猩际复制粘贴，三项分数及量表由用户录入。截图只承担逐词红/黄/绿颜色及可见停顿标记的来源，不要求从截图重建完整转写或分数。先用真实用户/benchmark 截图验证词框/阅读顺序、颜色和停顿识别；可评估本机 macOS Vision OCR 辅助定位词，但 OCR 文字只用于与粘贴转写匹配。颜色分类仍需读取截图像素，不能假定 OCR 自带词色。匹配必须按词序处理重复词，遇到漏词、换行、标点或截图不完整时标记错位并交给用户复核，不能按相同词形随意配对。

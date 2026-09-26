@@ -1,14 +1,14 @@
 # PTE Speaking Lab — 项目需求与产品规格
 
 **版本：** MVP v0.1 · **状态：** 开发基线 · **日期：** 2026-09-26<br>
-**适用环境：** 单用户、本机运行；开发机 MacBook Air M2 / 24 GB，未来迁移至 MacBook Pro M5 Pro / 48 GB。<br>
+**适用环境：** MacBook Air M2 / 24 GB 开发，本机或受密码保护的可信内网访问；未来迁移至 MacBook Pro M5 Pro / 48 GB。<br>
 **技术实现：** 见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 1. 产品定位
 
-PTE Speaking Lab 接收同一道口语练习的两份回答：用户回答和猩际 PTE 中已有的高分回答。它复用猩际提供的成绩、转写和逐词标签，结合录音中的可测量证据，解释**发音 Pronunciation**和**流利度 Fluency**的差异，给出下一次练习的优先事项。
+PTE Speaking Lab 接收针对同一朗读稿的两份录音：用户录音和用户另行生成的 AI 高分参考录音。两份录音都经过猩际 PTE，分别提供猩际成绩、实际转写和逐词标签。系统结合录音中的可测量证据，解释**发音 Pronunciation**和**流利度 Fluency**的差异，给出下一次练习的优先事项。
 
-高分回答是 **benchmark**：可用来观察一种高分表现，不代表唯一标准答案、官方评分依据或必须模仿的内容。系统不重新预测 Pearson/PTE 官方成绩，也不把两个不同回答按词序硬性对齐。
+AI 高分录音是 **benchmark**：可用来观察一种高分表现，不代表唯一标准答案、官方评分依据或必须模仿的发音。两侧计划朗读文本相同，但个别实际转写词和录音尾部可能不同；原始转写必须分别保存。系统不重新预测 Pearson/PTE 官方成绩，也不把转写差异直接当作发音错误。
 
 ### 1.1 核心目标
 
@@ -23,12 +23,12 @@ PTE Speaking Lab 接收同一道口语练习的两份回答：用户回答和猩
 - Content 自行评分、图像理解、答案语义覆盖分析；**仅保存并展示猩际 Content 分**。
 - 自动抓取猩际网页、破解或推测其评分算法；MVP 采用人工录入/粘贴或本地文件上传。
 - 生成“官方 PTE 分数”或把高分录音认作标准发音。
-- 用户账号、云同步、多人协作、移动端应用、实时考试模拟。
+- 独立用户账号与数据隔离、云同步、多人协作、移动端应用、实时考试模拟；内网访问者共用同一数据集。
 - 必须成功定位每个音素；没有可靠声学证据时只标记“待核查”。
 
 ## 2. 目标用户与主要场景
 
-单个 PTE 备考者已经拥有自己和高分者的猩际录音及反馈，希望知道：红黄词问题发生在哪里；自己的停顿、语速和节奏与高分表现相差多少；哪些差异应先练。
+PTE 备考者拥有自己的录音和已生成的 AI 高分录音，并已让两侧经过猩际 PTE，希望知道：红黄词问题发生在哪里；自己的停顿、语速和节奏与 AI 参考表现相差多少；哪些差异应先练。
 
 **首个端到端场景：** 选定一道题 → 建立两份 ResponseSample → 上传音频、粘贴猩际转写、填写三项分数、上传逐词颜色截图 → 将截图颜色对应到转写词序并复核 → 开始分析 → 查看双边波形、证据、比较和训练建议 → 再次练习并比较同一用户的历次结果。
 
@@ -36,8 +36,8 @@ PTE Speaking Lab 接收同一道口语练习的两份回答：用户回答和猩
 
 | 术语 | 定义 |
 |---|---|
-| Exercise | 一道练习题及其题型、来源题号或标识、可选题图；题图仅用于核实两侧同题，不参与评分。 |
-| ResponseSample | 一份完整回答，`role=user` 或 `role=benchmark`，包含音频、三项猩际分数、猩际转写和词级标签。 |
+| Exercise | 一道练习题、两侧计划朗读的共同原文及题型/标识；原文用于位置对照，不参与 Content 评分。 |
+| ResponseSample | 一份完整回答，`role=user` 为真人录音，`role=benchmark` 为上传的 AI 录音；各自包含音频、三项猩际分数、实际转写和词级标签。 |
 | Comparison | 同一 Exercise 下一个用户样本与一个 benchmark 的比较；以后允许同一用户多次尝试复用 benchmark。 |
 | 原始证据 | 录音、猩际标签/分数、原始转写、可复算的音频测量。 |
 | 推断 | 根据证据得出的原因或训练建议；必须指回证据，不能当作实测事实。 |
@@ -48,8 +48,8 @@ PTE Speaking Lab 接收同一道口语练习的两份回答：用户回答和猩
 
 ### 4.1 输入与分析流程
 
-1. 在“新建比较”页选择题型，填写题目来源/题号，必要时上传题图以核实两侧同题；题图不参与内容评分。
-2. 分别上传用户与 benchmark 音频，粘贴可直接获取的猩际转写，并填写 Pronunciation、Fluency、Content 分及原始满分/量表。
+1. 在“新建比较”页选择题型，填写共同朗读原文及可选题目名称。
+2. 分别上传用户真人录音与已生成的 AI 高分录音，各自粘贴猩际实际转写，并填写 Pronunciation、Fluency、Content 分及原始满分/量表。
 3. 上传两侧逐词颜色截图。系统用截图中的词位置/顺序辅助将颜色和可见停顿标记映射到**已粘贴转写**；截图识别出的文字仅用于匹配，不覆盖原始转写。保留原图、候选映射和识别置信度。
 4. 在原图旁复核每个词的颜色与停顿映射，修正错位。无法识别的颜色为 `unknown`，不可默认为绿色；结构化数据或手工编辑是备用入口。
 5. 输入校验显示音频可播放性、转写与截图词序的匹配情况、缺失项、重复词、分数范围和未确认字段。只有已复核的字段可进入相应分析；缺项允许部分报告。
@@ -75,10 +75,11 @@ PTE Speaking Lab 接收同一道口语练习的两份回答：用户回答和猩
 
 ```json
 {
-  "exercise": {"question_type": "DI", "title": "Energy chart"},
+  "exercise": {"question_type": "DI", "title": "Energy chart", "reading_text_raw": "The chart shows renewable energy ..."},
   "samples": [
     {
       "role": "user",
+      "audio_origin": "human_recording",
       "audio_file": "uploaded-user.m4a",
       "xingji_scores": {
         "pronunciation": {"value": 62, "max": 90},
@@ -94,7 +95,7 @@ PTE Speaking Lab 接收同一道口语练习的两份回答：用户回答和猩
       ],
       "xingji_pauses": [{"after_token_index": 1, "label": "pause"}]
     },
-    {"role": "benchmark", "audio_file": "uploaded-high.m4a", "xingji_scores": "same shape", "xingji_transcript": "...", "transcript_source": "xingji_copy", "color_screenshot_ids": ["image-high-1"], "tokens": [], "xingji_pauses": []}
+    {"role": "benchmark", "audio_origin": "ai_generated", "audio_file": "uploaded-ai-high.m4a", "xingji_scores": "same shape", "xingji_transcript": "...", "transcript_source": "xingji_copy", "color_screenshot_ids": ["image-high-1"], "tokens": [], "xingji_pauses": []}
   ]
 }
 ```
@@ -110,7 +111,7 @@ PTE Speaking Lab 接收同一道口语练习的两份回答：用户回答和猩
 - 先呈现猩际红/黄/绿词数和比例，分母只包含有明确颜色的词；未知标签另列。
 - 用户红词优先、黄词次之做 targeted analysis；允许设置每次分析词数上限，避免成本不可控。
 - 对每个目标词提供原音频片段、猩际标签、时间定位质量、可用 Provider 的声学判断和来源。接入 OpenPronounce 时，其输出仍视为**独立模型线索**，不能声称是猩际评分原因。
-- 共享词比较按规范化词形匹配，保留重复出现的不同实例；优先配对颜色差异明显且对齐质量高的实例。词不同则不做逐词发音 A/B。
+- 共享词比较按共同朗读稿的词位置与两侧实际转写的顺序配对，保留重复出现的不同实例；颜色差异不能驱动配对。词不同或仅一侧读到的尾部不做逐词发音 A/B。
 - 展示双边整体标签分布、红黄词密度等；词汇和句长不同，要提示统计口径及样本量。
 - 如果只有标签、缺少可靠声学判断，输出“该词被猩际标黄/红，建议回听”，而不是断定具体音素错误。
 

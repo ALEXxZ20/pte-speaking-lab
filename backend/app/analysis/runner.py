@@ -16,7 +16,7 @@ from app.persistence.samples import now, uid
 from app.providers.openai_llm import OpenAILLMProvider
 from app.providers.openpronounce import OpenPronouncePhones
 
-VERSION = "analysis-v2"
+VERSION = "analysis-v3"
 
 
 def _snapshot(db, sample_id: str) -> tuple[str, dict]:
@@ -54,7 +54,7 @@ def run_comparison(comparison_id: str, settings: Settings, allow_cloud: bool = F
         raise ValueError("openai_key_and_model_required")
     with connect(settings.database_path) as db:
         db.execute("BEGIN IMMEDIATE")
-        comparison = db.execute("SELECT user_sample_id,benchmark_sample_id FROM comparisons WHERE id=?", (comparison_id,)).fetchone()
+        comparison = db.execute("SELECT c.user_sample_id,c.benchmark_sample_id,e.reading_text_raw FROM comparisons c JOIN exercises e ON e.id=c.exercise_id WHERE c.id=?", (comparison_id,)).fetchone()
         if not comparison:
             raise ValueError("comparison_not_found")
         active = db.execute("SELECT 1 FROM analysis_runs WHERE comparison_id=? AND status='running'", (comparison_id,)).fetchone()
@@ -62,6 +62,7 @@ def run_comparison(comparison_id: str, settings: Settings, allow_cloud: bool = F
             raise ValueError("analysis_already_running")
         ids = {"user": comparison["user_sample_id"], "benchmark": comparison["benchmark_sample_id"]}
         snapshots = {role: _snapshot(db, sample_id) for role, sample_id in ids.items()}
+        reading_text_raw = comparison["reading_text_raw"]
         run_id = uid("run")
         config = {"alignment_provider": settings.alignment_provider, "pronunciation_provider": "openpronounce" if use_openpronounce else "none",
                   "llm_provider": "openai" if allow_cloud else "none", "pause_min_ms": settings.pause_min_ms,
@@ -75,7 +76,8 @@ def run_comparison(comparison_id: str, settings: Settings, allow_cloud: bool = F
         results = {role: _prepare_one(ids[role], snapshots[role][1], settings, phoneme_provider) for role in ("user", "benchmark")}
         left, right = results["user"], results["benchmark"]
         comparison_result = compare(left["sample"], right["sample"], left["alignment"], right["alignment"],
-                                    left["pronunciation"], right["pronunciation"], left["fluency"], right["fluency"])
+                                    left["pronunciation"], right["pronunciation"], left["fluency"], right["fluency"],
+                                    reading_text_raw)
         llm = OpenAILLMProvider(settings.openai_api_key.get_secret_value(), settings.openai_analysis_model) if allow_cloud else None
         diagnosis = diagnose(left["pronunciation"], left["fluency"], comparison_result, llm, settings.cross_dimension_window_ms)
         partial = any(result["alignment"]["status"] != "complete" or result["fluency"]["status"] != "complete" or result["pronunciation"]["status"] != "complete" for result in results.values())

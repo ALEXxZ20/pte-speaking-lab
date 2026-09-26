@@ -4,16 +4,16 @@ import { createComparison, importScreenshot, upload, type Comparison, type Draft
 type Role = 'user' | 'benchmark'
 type FormSide = { audio: File | null; screenshot: File | null; transcript: string; pronunciation: string; fluency: string; content: string }
 const empty = (): FormSide => ({ audio: null, screenshot: null, transcript: '', pronunciation: '', fluency: '', content: '' })
-const names: Record<Role, string> = { user: '我的回答', benchmark: '高分 Benchmark' }
+const names: Record<Role, string> = { user: '我的回答', benchmark: 'AI 生成的高分参考录音' }
 const colors = { red: '红色', yellow: '黄色', green: '绿色', unknown: '未知' }
 
 function ScoreField({ label, value, max, change }: { label: string; value: string; max: string; change: (value: string) => void }) {
-  return <label className="block text-sm text-slate-700"><span className="font-medium">{label}</span><span className="mt-1 flex items-center gap-2"><input className="field w-24" type="number" min="0" max={max} step="0.1" value={value} onChange={event => change(event.target.value)} /><span className="text-slate-500">/ {max}</span></span></label>
+  return <label className="block text-sm text-slate-700"><span className="font-medium">{label}</span><span className="mt-1 flex items-center gap-2"><input className="field w-24" type="number" min="0" max={max} step="0.1" value={value} onChange={event => change(event.target.value)} required /><span className="text-slate-500">/ {max}</span></span></label>
 }
 
 function SampleForm({ role, value, change }: { role: Role; value: FormSide; change: (next: FormSide) => void }) {
   const set = (field: keyof FormSide, next: string | File | null) => change({ ...value, [field]: next })
-  return <section className="panel space-y-5"><div><p className="text-xs font-semibold uppercase tracking-widest text-indigo-600">{role === 'user' ? '01' : '02'} · Response Sample</p><h2 className="mt-1 text-xl font-semibold">{names[role]}</h2></div>
+  return <section className="panel space-y-5"><div><p className="text-xs font-semibold uppercase tracking-widest text-indigo-600">{role === 'user' ? '01' : '02'} · Response Sample</p><h2 className="mt-1 text-xl font-semibold">{names[role]}</h2>{role === 'benchmark' && <p className="mt-1 text-sm text-slate-600">上传已生成的 AI 音频，以及这段音频在猩际 PTE 得到的转写、截图和三项分数。本项目不生成朗读音频。</p>}</div>
     <label className="block text-sm font-medium">录音文件 <span className="text-red-600">*</span><input className="file-field mt-2" type="file" accept="audio/*,.m4a,.mp4,.webm,.wav,.mp3" onChange={event => set('audio', event.target.files?.[0] || null)} /></label>
     <label className="block text-sm font-medium">猩际逐词颜色截图 <span className="text-red-600">*</span><input className="file-field mt-2" type="file" accept="image/png,image/jpeg" onChange={event => set('screenshot', event.target.files?.[0] || null)} /></label>
     <label className="block text-sm font-medium">复制的猩际转写 <span className="text-red-600">*</span><textarea className="field mt-2 min-h-40 w-full resize-y" value={value.transcript} onChange={event => set('transcript', event.target.value)} placeholder="在猩际复制完整转写，粘贴到这里" /></label>
@@ -60,6 +60,7 @@ export function ReviewPanel({ record, draft, onSaved }: { record: SampleRecord; 
 export default function NewComparison() {
   const [title, setTitle] = useState('')
   const [questionType, setQuestionType] = useState('DI')
+  const [readingText, setReadingText] = useState('')
   const [sides, setSides] = useState<Record<Role, FormSide>>({ user: empty(), benchmark: empty() })
   const [comparison, setComparison] = useState<Comparison | null>(null)
   const [drafts, setDrafts] = useState<Record<Role, Draft | null>>({ user: null, benchmark: null })
@@ -68,12 +69,12 @@ export default function NewComparison() {
   function score(value: string, max: number) { return value.trim() ? { value: Number(value), max } : null }
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (Object.values(sides).some(side => !side.audio || !side.screenshot || !side.transcript.trim())) { setMessage('请为两侧提供录音、截图和转写。'); return }
+    if (!readingText.trim() || Object.values(sides).some(side => !side.audio || !side.screenshot || !side.transcript.trim() || !side.pronunciation || !side.fluency || !side.content)) { setMessage('请填写共同朗读稿，并为两侧提供录音、截图、猩际实际转写和三项分数。'); return }
     setBusy(true); setMessage('正在上传并保存双边样本…')
     try {
       const roles: Role[] = ['user', 'benchmark']
       const uploads = await Promise.all(roles.map(async role => ({ role, audio: await upload('audio', sides[role].audio!), screenshot: await upload('screenshots', sides[role].screenshot!) })))
-      const body = { exercise: { question_type: questionType, title: title || null }, samples: uploads.map(({ role, audio, screenshot }) => ({ role, audio_asset_id: audio.id, color_screenshot_asset_ids: [screenshot.id], transcript_raw: sides[role].transcript, transcript_source: 'xingji_copy', pronunciation_score: score(sides[role].pronunciation, 90), fluency_score: score(sides[role].fluency, 90), content_score: score(sides[role].content, 5) })) }
+      const body = { exercise: { question_type: questionType, title: title || null, reading_text_raw: readingText }, samples: uploads.map(({ role, audio, screenshot }) => ({ role, audio_origin: role === 'user' ? 'human_recording' : 'ai_generated', audio_asset_id: audio.id, color_screenshot_asset_ids: [screenshot.id], transcript_raw: sides[role].transcript, transcript_source: 'xingji_copy', pronunciation_score: score(sides[role].pronunciation, 90), fluency_score: score(sides[role].fluency, 90), content_score: score(sides[role].content, 5) })) }
       const created = await createComparison(body)
       setComparison(created)
       setMessage('双边样本已保存，正在生成截图词色草稿…')
@@ -83,8 +84,8 @@ export default function NewComparison() {
     } catch (error) { setMessage(error instanceof Error ? error.message : '保存失败，请重试') }
     finally { setBusy(false) }
   }
-  return <div className="space-y-8"><div><p className="eyebrow">新建比较</p><h1 className="page-title">导入同一道题的两份回答</h1><p className="page-subtitle">猩际转写可直接粘贴，颜色从截图生成草稿后由你确认。高分样本仅作对照。</p></div>
-    {!comparison ? <form onSubmit={submit} className="space-y-6"><div className="panel grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">题型<input className="field mt-2 w-full" value={questionType} onChange={event => setQuestionType(event.target.value)} required /></label><label className="text-sm font-medium">题目名称或编号（可选）<input className="field mt-2 w-full" value={title} onChange={event => setTitle(event.target.value)} /></label></div><div className="grid gap-6 lg:grid-cols-2">{(['user', 'benchmark'] as const).map(role => <SampleForm key={role} role={role} value={sides[role]} change={next => setSides(previous => ({ ...previous, [role]: next }))} />)}</div><button className="button-primary" disabled={busy}>{busy ? '处理中…' : '保存双边样本并识别词色'}</button></form> : <div className="space-y-6"><p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">双边样本已保存。比较编号：{comparison.id}</p>{(['user', 'benchmark'] as const).map(role => <ReviewPanel key={role} record={comparison.samples[role]} draft={drafts[role]} onSaved={next => setComparison(previous => previous && ({ ...previous, samples: { ...previous.samples, [role]: next } }))} />)}<a className="button-primary inline-block" href={`/comparisons/${comparison.id}`}>查看比较</a></div>}
+  return <div className="space-y-8"><div><p className="eyebrow">新建比较</p><h1 className="page-title">比较同一朗读稿的两份录音</h1><p className="page-subtitle">一侧是你的录音，一侧是已生成并获得猩际评分的 AI 高分录音。两侧实际转写可有个别词和尾部差异；请分别粘贴原文。颜色由截图生成草稿后复核。</p></div>
+    {!comparison ? <form onSubmit={submit} className="space-y-6"><div className="panel grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">题型<input className="field mt-2 w-full" value={questionType} onChange={event => setQuestionType(event.target.value)} required /></label><label className="text-sm font-medium">题目名称或编号（可选）<input className="field mt-2 w-full" value={title} onChange={event => setTitle(event.target.value)} /></label><label className="text-sm font-medium sm:col-span-2">两侧计划朗读的共同原文 <span className="text-red-600">*</span><textarea className="field mt-2 min-h-36 w-full resize-y" value={readingText} onChange={event => setReadingText(event.target.value)} placeholder="粘贴原本希望两侧都朗读的完整文本；不要用猩际转写替代" required /></label></div><div className="grid gap-6 lg:grid-cols-2">{(['user', 'benchmark'] as const).map(role => <SampleForm key={role} role={role} value={sides[role]} change={next => setSides(previous => ({ ...previous, [role]: next }))} />)}</div><button className="button-primary" disabled={busy}>{busy ? '处理中…' : '保存双边样本并识别词色'}</button></form> : <div className="space-y-6"><p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">双边样本已保存。比较编号：{comparison.id}</p>{(['user', 'benchmark'] as const).map(role => <ReviewPanel key={role} record={comparison.samples[role]} draft={drafts[role]} onSaved={next => setComparison(previous => previous && ({ ...previous, samples: { ...previous.samples, [role]: next } }))} />)}<a className="button-primary inline-block" href={`/comparisons/${comparison.id}`}>查看比较</a></div>}
     {message && <p role="status" className="rounded-xl bg-indigo-50 p-4 text-sm text-indigo-800">{message}</p>}
   </div>
 }

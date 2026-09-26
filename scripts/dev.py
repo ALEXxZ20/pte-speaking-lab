@@ -36,6 +36,8 @@ def main():
         if not any(part in key.upper() for part in ("API_KEY", "SECRET", "TOKEN", "PASSWORD"))
         and not key.startswith("VITE_")
     }
+    backend_env = dict(os.environ)
+    backend_env["PTE_LAN_MODE"] = "false"
     processes = []
     stopping = False
 
@@ -50,6 +52,7 @@ def main():
             [str(PYTHON), "-m", "uvicorn", "app.main:app", "--app-dir", str(ROOT / "backend"),
              "--host", "127.0.0.1", "--port", "8000", "--reload", "--reload-dir", str(ROOT / "backend")],
             cwd=ROOT, start_new_session=True,
+            env=backend_env,
         ))
         processes.append(subprocess.Popen(
             [shutil.which("npm"), "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173", "--strictPort"],
