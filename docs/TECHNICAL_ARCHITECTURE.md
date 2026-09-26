@@ -51,7 +51,7 @@
 
 ## 3. 数据库、版本与接口
 
-SQLite 迁移位于 `backend/app/persistence/migrations/`：0001 建立资产基础表；0002 建立 exercises、response_samples、external_scores、sample_tokens、pause_labels、sample_revisions、comparisons、screenshot_imports；0003 建立 analysis_runs、timed_tokens、metrics、evidence、findings、finding_evidence、comparisons_result；0004 为 exercises 加入 `reading_text_raw`；0005 加入朗读稿截图/OCR 来源及 `candidate` 词色状态。每次修改样本产生新 revision；每次分析运行绑定两侧 revision ID、算法版本及关键阈值。旧报告存完整 JSON，不被输入更正覆盖。AI 录音来源 `audio_origin` 保存在样本 revision JSON 中；旧记录缺字段视为 `legacy_unspecified`。
+SQLite 迁移位于 `backend/app/persistence/migrations/`：0001 建立资产基础表；0002 建立 exercises、response_samples、external_scores、sample_tokens、pause_labels、sample_revisions、comparisons、screenshot_imports；0003 建立 analysis_runs、timed_tokens、metrics、evidence、findings、finding_evidence、comparisons_result；0004 为 exercises 加入 `reading_text_raw`；0005 加入朗读稿截图/OCR 来源及 `candidate` 词色状态；0006 修复已登记 0005、但词色表仍保留旧约束的数据库，同时复制已有词记录。每次修改样本产生新 revision；每次分析运行绑定两侧 revision ID、算法版本及关键阈值。旧报告存完整 JSON，不被输入更正覆盖。AI 录音来源 `audio_origin` 保存在样本 revision JSON 中；旧记录缺字段视为 `legacy_unspecified`。
 
 API 前缀 `/api/v1`：资产上传/读取；`POST /comparisons`、`GET /comparisons/{id}`、`PATCH /samples/{id}`、截图导入、历史/删除预览/删除；`POST /comparisons/{id}/runs`、`GET /runs/{id}/report`、录音回听；`GET /health` 与 `GET /settings/providers`。写入采用样本版本冲突检查；分析已运行时不并发启动同一 Comparison。输出的 evidence 含维度、来源、位置、质量、算法版本；finding 引用 evidence ID。API key 和内网密码不进入响应、SQLite、日志或 Git。
 

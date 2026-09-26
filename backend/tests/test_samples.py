@@ -7,7 +7,7 @@ from PIL import Image
 
 from app.config import Settings
 from app.main import create_app
-from app.persistence.database import connect
+from app.persistence.database import connect, migrate
 
 
 def wav_bytes():
@@ -72,6 +72,36 @@ def test_unconfirmed_color_cannot_be_saved(tmp_path):
             {"role": "benchmark", "transcript_raw": "Hello"}]}
         response = client.post("/api/v1/comparisons", json=body)
         assert response.status_code == 422
+
+
+def test_old_word_color_constraint_is_repaired_before_candidate_creation(tmp_path):
+    settings = Settings(_env_file=None, pte_data_dir=tmp_path)
+    migrate(settings.database_path)
+    with connect(settings.database_path) as db:
+        db.execute("DROP TABLE sample_tokens")
+        db.execute("""CREATE TABLE sample_tokens (
+            sample_id TEXT NOT NULL REFERENCES response_samples(id), token_index INTEGER NOT NULL,
+            surface TEXT NOT NULL, normalized TEXT NOT NULL,
+            color TEXT NOT NULL CHECK(color IN ('red','yellow','green','unknown')),
+            color_review_status TEXT NOT NULL CHECK(color_review_status IN ('confirmed','unreviewed')),
+            color_source_screenshot_id TEXT REFERENCES screenshot_assets(id),
+            PRIMARY KEY(sample_id,token_index))""")
+        db.execute("INSERT INTO exercises (id,question_type,created_at) VALUES ('prior-exercise','DI','2026-01-01')")
+        db.execute("INSERT INTO response_samples (id,exercise_id,role,input_payload_json,created_at) VALUES ('prior-sample','prior-exercise','user','{}','2026-01-01')")
+        db.execute("INSERT INTO sample_tokens VALUES ('prior-sample',0,'Existing','existing','green','confirmed',NULL)")
+        db.execute("DELETE FROM schema_migrations WHERE version='0006_repair_candidate_colors'")
+    with TestClient(create_app(settings), raise_server_exceptions=False) as client:
+        picture = io.BytesIO()
+        Image.new("RGB", (20, 20), "red").save(picture, format="PNG")
+        screenshot_id = client.post("/api/v1/assets/screenshots", files={"file": ("word.png", picture.getvalue(), "image/png")}).json()["id"]
+        samples = [{"role": role, "transcript_raw": "Hello", "color_screenshot_asset_ids": [screenshot_id],
+                    "tokens": [{"index": 0, "surface": "Hello", "color": "red", "color_review_status": "candidate",
+                                "color_source_screenshot_id": screenshot_id}]} for role in ("user", "benchmark")]
+        response = client.post("/api/v1/comparisons", json={"exercise": {"question_type": "DI"}, "samples": samples})
+        assert response.status_code == 200, response.text
+    with connect(settings.database_path) as db:
+        assert db.execute("SELECT COUNT(*) FROM sample_tokens WHERE color_review_status='candidate'").fetchone()[0] == 2
+        assert db.execute("SELECT surface FROM sample_tokens WHERE sample_id='prior-sample'").fetchone()[0] == "Existing"
 
 
 def test_deleting_comparison_preserves_shared_assets(tmp_path):

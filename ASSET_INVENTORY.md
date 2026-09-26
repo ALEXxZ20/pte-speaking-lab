@@ -84,6 +84,7 @@
 | `backend/app/persistence/migrations/0003_analysis.sql` | 建立分析运行、指标、证据、发现与报告表。 |
 | `backend/app/persistence/migrations/0004_shared_reading_text.sql` | 给 Exercise 增加共同朗读原文。 |
 | `backend/app/persistence/migrations/0005_screenshot_reading.sql` | 关联朗读稿截图/OCR 来源，并使词色支持 `candidate` 状态。 |
+| `backend/app/persistence/migrations/0006_repair_candidate_colors.sql` | 修复旧数据库未真正更新的词色约束，保留已有词记录。 |
 
 ## 后端测试
 
@@ -96,7 +97,7 @@
 | `backend/tests/test_lan.py` | 内网页面和 API 的密码保护。 |
 | `backend/tests/test_runs.py` | 分析运行、候选词色、云端配置与历史报告不可变。 |
 | `backend/tests/test_llm_provider.py` | CLIProxyAPI 兼容请求路径、JSON 解析与地址校验。 |
-| `backend/tests/test_samples.py` | 双边资产、样本修订、数据校验与共享文件删除。 |
+| `backend/tests/test_samples.py` | 双边资产、样本修订、数据校验、旧词色表迁移与共享文件删除。 |
 | `backend/tests/test_screenshot_mapping.py` | OCR 词序、重复词、低置信度与页眉排除。 |
 
 ## 前端文件

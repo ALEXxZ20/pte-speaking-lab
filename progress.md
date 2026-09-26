@@ -64,3 +64,9 @@
 - 增加 `LLM_PROVIDER=openai_compatible`，通过 `OPENAI_BASE_URL` 将可选训练建议改写送往兼容 Chat Completions 服务。官方 OpenAI Responses 路径保留；默认仍不调用 LLM，调用失败回退本机规则。
 - 本机 Git 忽略的 `.env` 已设置 `http://127.0.0.1:8317/v1` 和用户指定的 `gpt-6-sol`；访问密钥尚未填写，真实代理模型调用待填写密钥后验证。根路径确认服务正在监听，未授权 `/v1/models` 返回 401。
 - Provider 请求只传规则结论与相关证据，返回 JSON 经过结构及 finding/evidence ID 校验；任一条校验失败会整体保留本机规则结果。后端和网页状态不暴露密钥。已通过兼容接口模拟请求与完整分析集成测试；后端 **36 passed**、前端生产构建通过。重启后的内网网页、健康检查和 Provider 设置均为 200，未授权访问为 401；真实模型调用仍待填入密钥后验证。
+
+## 2026-09-26：CLIProxyAPI 实测及创建比较 500 修复
+
+- 用户本地填写密钥后，CLIProxyAPI `/v1/models` 返回 13 个模型且包含 `gpt-6-sol`；项目用虚构证据完成一次真实 Chat Completions 改写，JSON 与证据 ID 校验通过。重启内网服务后 Provider 状态显示 key、模型和 base URL 均已配置；真实用户报告未用于此连通性测试。
+- 用户新建比较出现 HTTP 500。日志定位到 `sample_tokens.color_review_status` 的 SQLite CHECK：数据库虽登记了迁移 0005，但实际表仍只允许 `confirmed`/`unreviewed`。隔离 API 回归测试先稳定复现 500，再由迁移 0006 重建表并保留旧词记录。后端 **37 passed**。
+- 执行前将数据库在线备份到 Git 忽略的 `data/db/pte.sqlite3.pre-0006-20260926-191854.bak`。内网服务重启后，迁移 0006 已登记；回滚试写确认 `candidate` 可保存，原有 **394** 条词记录数量不变，`PRAGMA integrity_check=ok`。失败提交产生的上传资产未自动清理，避免误删用户仍可能重新使用的文件。
