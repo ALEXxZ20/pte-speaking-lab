@@ -116,7 +116,7 @@
 | `frontend/src/components/Waveform.tsx` | 音频波形、播放、证据位置跳转，以及同一页面内的互斥播放。 |
 | `frontend/src/pages/NewComparison.tsx` | 截图粘贴/选择、OCR 预览编辑、双边表单和词色复核。 |
 | `frontend/src/pages/ComparisonDetail.tsx` | 比较运行选项、Provider 状态、历史报告、删除与复核入口。 |
-| `frontend/src/pages/ReportView.tsx` | 双边报告、流利度说明、共享词颜色、默认红黄词双边上下文、完整证据时间轴切换、尾部跳转与回听。 |
+| `frontend/src/pages/ReportView.tsx` | 双边报告、流利度说明、共享词颜色、默认红黄词双边上下文、时间轴快捷入口、完整证据切换、尾部跳转、上下文与单词片段回听。 |
 | `frontend/src/pages/Settings.tsx` | 配置状态和用户可见的设置说明。 |
 
 ## 脚本和文档

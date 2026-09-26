@@ -64,14 +64,22 @@ function EvidenceTimeline({ report, setJump }: { report: Report; setJump: (role:
     const playable = targetTime?.quality === 'medium' && targetTime.start_s !== null && targetTime.end_s !== null
     const start = timed.length ? Math.max(0, timed[0]!.start_s! - 0.2) : 0
     const end = timed.length ? timed[timed.length - 1]!.end_s! + 0.2 : undefined
+    const nearby = tokens.filter(token => Math.abs(token.index - index) <= 1)
+      .map(token => side.alignment.tokens.find(time => time.index === token.index))
+      .filter(time => time?.quality === 'medium' && time.start_s !== null && time.end_s !== null)
+    const wordStart = nearby.length ? Math.max(0, Math.min(...nearby.map(time => time!.start_s!)) - 0.12) : 0
+    const wordEnd = nearby.length ? Math.max(...nearby.map(time => time!.end_s!)) + 0.12 : undefined
     return <div className="rounded-lg bg-white/80 p-3">
       <p className="text-xs font-semibold text-slate-600">{names[role]} · {playable ? `${targetTime.start_s!.toFixed(2)}s` : '时间定位不可靠'}</p>
       <p className="mt-1 text-sm leading-7">{tokens.map(token => <span key={token.index} className={token.index === index ? 'rounded bg-indigo-100 px-1 font-semibold text-indigo-900' : ''}>{token.surface}{' '}</span>)}</p>
-      <button type="button" className="mt-2 text-sm font-medium text-indigo-700 underline disabled:text-slate-400" disabled={!playable || end === undefined} onClick={() => setJump(role, start, end)}>回听这段上下文</button>
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <button type="button" className="text-sm font-medium text-indigo-700 underline disabled:text-slate-400" disabled={!playable || end === undefined} onClick={() => setJump(role, start, end)}>回听这段上下文</button>
+        <button type="button" className="text-sm font-medium text-indigo-700 underline disabled:text-slate-400" disabled={!playable || wordEnd === undefined} onClick={() => setJump(role, wordStart, wordEnd)} title="播放目标词及前后各一词；邻词时间不可靠时仅播放可定位部分">回听这个词</button>
+      </div>
     </div>
   }
   entries.sort((a, b) => (a.item.start_s || 0) - (b.item.start_s || 0))
-  return <section className="panel">
+  return <section id="evidence-timeline" className="panel scroll-mt-20">
     <h3 className="text-lg font-semibold">证据时间轴</h3>
     <p className="mt-1 text-sm text-slate-600">{focused ? `优先查看我的 ${focusTokens.length} 个红黄词及前后各 3 个词；有共同朗读稿配对时显示 AI 同词及上下文。` : `按录音时间查看全部 ${entries.length} 条可定位证据；我的红词和黄词用对应颜色标出。点击证据回听。证据可信度描述来源可靠程度，不是发音分数。`}{untimedCount > 0 && `另有 ${untimedCount} 条证据没有可靠时间戳，无法精确定位。`}</p>
     <button type="button" aria-pressed={focused} className="mt-3 rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-700" onClick={() => { setFocused(value => !value); listRef.current?.scrollTo({ top: 0 }) }}>{focused ? '显示全部证据' : '只看红黄词与上下文'}</button>
@@ -151,12 +159,15 @@ export default function ReportView({ report }: { report: Report }) {
   const [jumps, setJumps] = useState<Record<Role, { start: number; end?: number; nonce: number } | null>>({ user: null, benchmark: null })
   const jump = (role: Role, start: number, end?: number) => setJumps(previous => ({ ...previous, [role]: { start, end, nonce: Date.now() + Math.random() } }))
   return <div className="space-y-6">
+    <nav aria-label="报告快捷入口" className="sticky top-2 z-20 flex justify-end">
+      <a href="#evidence-timeline" className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-indigo-700">查看证据时间轴 ↓</a>
+    </nav>
     <div className={`rounded-xl p-4 text-sm ${report.status === 'complete' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>报告状态：{report.status === 'complete' ? '完整' : '部分完成'}。低质量或缺失的测量不会被当作已证实的发音问题。</div>
     <div className="grid gap-6 lg:grid-cols-2">{(['user', 'benchmark'] as const).map(role => <SidePanel key={role} role={role} side={report.samples[role]} report={report} jump={jumps[role]} setJump={value => setJumps(previous => ({ ...previous, [role]: value }))} />)}</div>
+    <EvidenceTimeline report={report} setJump={jump} />
     <TranscriptCoverage report={report} />
     <FluencyPanel report={report} />
     <SharedWords report={report} />
-    <EvidenceTimeline report={report} setJump={jump} />
     <TrainingPriorities report={report} />
   </div>
 }
