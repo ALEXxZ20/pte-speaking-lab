@@ -136,6 +136,7 @@
 | `docs/TECHNICAL_ARCHITECTURE.md` | 当前代码的数据流、模块实现和降级机制。 |
 | `docs/T00_FEASIBILITY.md` | 原始真实截图 OCR 和本机模型验证记录。 |
 | `docs/MVP_ACCEPTANCE.md` | MVP 双边真实样本验收记录。 |
+| `docs/RELEASE_1.0_TO_v1.99.md` | 从 `1.0` 基线到 `v1.99` 的功能、迁移、验证和限制汇总。 |
 
 ## 本地运行目录
 

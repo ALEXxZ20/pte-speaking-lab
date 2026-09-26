@@ -28,7 +28,7 @@ OPENAI_ANALYSIS_MODEL=gpt-6-sol
 OPENAI_API_KEY=你的CLIProxyAPI访问密钥
 ```
 
-本机 `.env` 的前三项已按上述值设置，**只缺访问密钥**。到 CLIProxyAPI 的配置中取得其服务端允许的 API key，直接填入本地 `.env` 的 `OPENAI_API_KEY=` 后面；不要把密钥发到聊天里，也不要给它加 `VITE_` 前缀。`gpt-6-sol` 是计划调用的模型 ID，需确实出现在该代理使用此密钥返回的 `/v1/models` 列表中。项目后端与代理在同一台 Mac 上，故应使用 `127.0.0.1`；内网浏览器无需直连 8317。
+当前本机 `.env` 已配置 Provider、地址、`gpt-6-sol` 和访问密钥；密钥值仅留在本机。新安装时，从 CLIProxyAPI 配置中取得其服务端允许的 API key，直接填入本地 `.env` 的 `OPENAI_API_KEY=` 后面；不要把密钥发到聊天里，也不要给它加 `VITE_` 前缀。本机已通过 `/v1/models` 确认该模型，并用 `Choices of Lunch` 的真实证据完成一次建议改写；这只验证当前代理配置，不保证将来模型授权持续有效。项目后端与代理在同一台 Mac 上，故应使用 `127.0.0.1`；内网浏览器无需直连 8317。
 
 后端虚拟环境已安装 `backend/requirements-llm.lock` 中的 OpenAI SDK；更换机器时按该文件安装。填好密钥后运行 `./scripts/restart.sh`，到比较页面勾选 **“允许 CLIProxyAPI 改写训练建议”** 再点击“开始分析”。该选择随每次运行单独提交为 `allow_cloud=true`；默认不调用代理。代理只接收规则结论和所需证据，用于文字改写，不重新打 PTE 分，也不生成 benchmark 音频。调用失败会回退本机规则建议，报告中的 `llm_status` 会显示 `fallback_to_rules`。前端只收到“密钥是否已配置”和模型名，看不到密钥。实际模型能否调用，仍取决于 CLIProxyAPI 的上游配置与授权。
 

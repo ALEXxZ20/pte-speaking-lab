@@ -1,8 +1,10 @@
 # PTE Speaking Lab — 项目需求与产品规格
 
-**版本：** MVP v0.1 · **状态：** 开发基线 · **日期：** 2026-09-26<br>
+**文档修订：** v1.99 · **状态：** 当前产品范围 · **日期：** 2026-09-26<br>
 **适用环境：** MacBook Air M2 / 24 GB 开发，本机或受密码保护的可信内网访问；未来迁移至 MacBook Pro M5 Pro / 48 GB。<br>
 **技术实现：** 见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
+从 `1.0` 到 `v1.99` 的产品变更见 [版本变更记录](docs/RELEASE_1.0_TO_v1.99.md)。
 
 ## 1. 产品定位
 

@@ -1,9 +1,11 @@
 # PTE Speaking Lab — 技术架构
 
-**版本：** MVP v0.1 · **日期：** 2026-09-26<br>
+**文档修订：** v1.99 · **日期：** 2026-09-26<br>
 **产品范围：** 见 [PROJECT_SPEC.md](PROJECT_SPEC.md)。本文件中的阈值和算法口径是 MVP 初始配置，须随分析记录版本化；它们不是 PTE 官方评分规则。
 
 **当前代码实现与本设计蓝图的差异以 [TECHNICAL_ARCHITECTURE.md](docs/TECHNICAL_ARCHITECTURE.md) 为准。** 当前输入是共同朗读原文、用户真人录音，以及用户上传的 AI 生成高分录音；两侧各保留独立猩际实际转写、截图和分数。内网部署配置见 [CONFIGURATION.md](docs/CONFIGURATION.md)。
+
+`1.0` 基线后的实现变化、数据库迁移和验证记录见 [版本变更记录](docs/RELEASE_1.0_TO_v1.99.md)。
 
 ## 1. 架构约束与决策
 
