@@ -1,0 +1,26 @@
+services:
+  pte-speaking-lab:
+    build:
+      context: .
+    image: pte-speaking-lab:arm64-local
+    platform: linux/arm64
+    env_file:
+      - .env.docker
+    environment:
+      PTE_DATA_DIR: /app/data
+      PTE_LAN_MODE: "true"
+      LLM_PROVIDER: none
+      OPENAI_API_KEY: ""
+      OPENAI_BASE_URL: ""
+      HF_HOME: /opt/pte-models/hf
+      TORCH_HOME: /opt/pte-models/torch
+      NLTK_DATA: /opt/pte-models/nltk
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    ports:
+      - "${PTE_DOCKER_BIND_IP:?Set M5 private LAN IP in .env.docker}:8765:8765"
+    volumes:
+      - "${PTE_DOCKER_DATA_DIR:?Set persistent data directory in .env.docker}:/app/data"
+    restart: unless-stopped
+    stop_grace_period: 45s
+    mem_limit: 24g

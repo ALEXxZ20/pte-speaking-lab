@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.docker.example
 data/
 测试数据包/
 *.sqlite3

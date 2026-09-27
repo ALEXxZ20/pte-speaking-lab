@@ -2,6 +2,8 @@
 
 此文描述**现在的代码行为**。产品目标与后续扩展见 [PROJECT_SPEC.md](../PROJECT_SPEC.md) 和 [ARCHITECTURE.md](../ARCHITECTURE.md)；运行与配置见 [CONFIGURATION.md](CONFIGURATION.md)。
 
+M5 Docker 方案（待实机验收）增加一份 Linux ARM64 镜像：Node 构建 React 静态页；Python 3.11 运行 FastAPI/Uvicorn，内含 FFmpeg、英文 Tesseract、eSpeak NG、WhisperX、OpenPronounce 和预装权重。容器只监听内部 `0.0.0.0:8765`，Compose 把端口绑定到 M5 固定私有 IPv4；现有 Basic Auth 保护网页/API。`/app/data` 挂载外部业务数据；`/opt/pte-models` 在镜像内，显式缓存环境变量避免模型重下。音频模型使用 CPU，Edge TTS 仍需联网。本机原生启动脚本保持可用，详见 [M5 Docker 部署手册](M5_DOCKER_DEPLOYMENT.md)。
+
 ## 1. 系统边界与实际输入
 
 前端为 React + Vite + Tailwind + WaveSurfer；后端为 FastAPI；SQLite 保存结构化记录，filesystem 保存音频和截图；FFmpeg 做音频转换。本机开发是 Vite 5173 代理 API 8000。内网部署先构建前端，FastAPI 在单一 8765 端口同源提供网页/API/录音，并用 HTTP Basic 覆盖所有路径。`scripts/start.sh`、`stop.sh`、`restart.sh` 通过 macOS `launchd` 管理服务；plist、PID 与日志位于 Git 忽略的 `data/`。

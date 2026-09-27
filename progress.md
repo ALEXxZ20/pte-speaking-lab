@@ -113,3 +113,20 @@
 - 真实 `Choices of Lunch` 朗读稿生成 10 段、191 个词事件和 9 处接缝。比较 `comparison_aa38aa7d40294450ab68ec37fb64cd93` 的重跑 `run_0817844b3ebe43d1908625a3506f7bd8` 为 partial：TTS 侧可信词位 191/191，用户侧 181/186；TTS 停顿候选 0。partial 来自用户侧部分词定位和缺少外部词色等证据边界，不是合成失败。生成过程及报告沿用本机真实录音/脚本；私人数据不入库。
 - 最终后端 **48 passed**，前端 TypeScript 检查和生产构建通过，`git diff --check` 通过。内网服务重启后，未授权 API 为 401；授权首页、TTS 入口、健康检查、TTS 设置和历史 API 均为 200，TTS 设置为 enabled。Chrome 实际打开 TTS 入口，确认文字、截图、断句、音色/语速、用户录音与分数控件可见。
 - **仍有限制：** Edge TTS 需要联网，并会发送朗读稿；其词时间事件尚未经过独立 ASR/标注集核验。同步生成时长取决于服务与文本，失败可重试但没有后台队列/断点续传。合成过程与上传模式的流利度数据不可等同于自然真人高分表现。真实另一台内网设备尚未实测；本机启动和授权访问已验证。
+
+## 2026-09-28：M5 Pro 单镜像部署准备
+
+- 新增原生 ARM64 多阶段 `Dockerfile` 和单服务 `compose.yaml`。镜像内包含生产前端、FastAPI、FFmpeg、英文 Tesseract、eSpeak NG、WhisperX、OpenPronounce 与固定模型版本；运行时只使用 CPU。Compose 在 M5 固定内网 IP 映射 8765，保留现有 Basic Auth，运行数据挂载镜像外；关闭 CLIProxyAPI/OpenAI 配置。
+- OpenPronounce 在容器中从镜像内固定本地模型路径加载；WhisperX 尊重预设模型缓存变量。构建时加载模型，并在 BuildKit `--network=none` 层再次验证，缺模型就让构建失败。`facebook/wav2vec2-lv-60-espeak-cv-ft` 固定为本机已用的提交 `ae45363bf3413b374fecd9dc8bc1df0e24c3b7f4`；WhisperX 使用 torchaudio `WAV2VEC2_ASR_BASE_960H`。
+- 新增数据快照工具：SQLite backup API、`integrity_check`、逐文件 SHA-256；排除模型缓存、日志、运行 PID。新增 M5 从首次账号设置、SSH、Homebrew 安装 Docker、复制项目、迁移数据、构建运行到内网/离线模型验收的逐步手册。
+- 本机后端 **48 passed**，前端生产构建通过；临时数据快照导出/校验通过。随后已在 M5 完成部署与验收，详见下一节。
+
+## 2026-09-28：M5 Pro Docker 部署与验收
+
+- 使用 `zihanzong` 账号的 Docker Desktop，在 `192.168.5.19` 构建单个原生 Linux ARM64 镜像并启动。项目代码位于 `/Users/zihanzong/pte-speaking-lab`，个人数据位于 `/Users/zihanzong/pte-speaking-lab-data`，配置在权限为 600 的 Git 忽略文件 `.env.docker`。该文件使用随机密码；镜像不含密码、`.env`、录音、截图、数据库或测试数据。旧 Mac 服务继续作为回退。
+- 构建期间修复两处问题：非交互 SSH 的 PATH 缺少 Docker Desktop 凭据工具；NLTK 默认下载路径在当前代理环境被拦截，改为下载官方 `punkt_tab` 归档并校验固定 SHA-256。第三次构建成功。镜像大小 **6,072,283,625 字节**（约 6.07 GB）；首次完整成功构建时长未单独计时，未声称具体耗时。
+- 在无网络构建层及独立断网容器中验证 WhisperX 与 OpenPronounce 模型可加载。容器内 FFmpeg、ffprobe、Tesseract 英文 OCR、eSpeak NG 正常。M5 容器测试 **48 passed**；测试命令临时关闭 Basic Auth 并设置测试预期的 provider，不改变生产配置。前端生产构建随镜像构建通过。
+- 从旧 Mac 暂停服务，使用 SQLite backup API 导出数据快照后立即恢复旧服务；迁移 **56 个文件**（数据库及 55 个原始资产）至 M5，快照哈希和数据库完整性通过。两次真录音分析及容器重启之后，55 个原始资产哈希仍匹配，SQLite `integrity_check=ok`。未将这些数据推入 Git。
+- `Choices of Lunch` 原始双边样本分析 `run_f1fdb1c5cbd24537919b761e99d8f8f8` 用时约 **14.35 秒**；重启后再次分析 `run_9cd47b5680b1418abade80ca5da36cfa` 用时约 **15.12 秒**，容器内存采样峰值 **2.291 GiB**。两次均为 `partial`，因用户/参考侧少量词时间戳质量不足；发音、流利度、比较、诊断和总结均产生。旧 `Choices of Lunch` TTS 对比重跑也成功。
+- 认证健康检查、首页、历史 API、新旧报告均返回 200；未授权 API 返回 401。从旧 Mac 请求 M5 内网地址得到 401，证实第二台设备能到达服务。双边音频尾部 Range 请求得到 206 和预期 1024 字节。在线 Edge TTS 返回 200 与词边界；断网返回中文 503 失败提示。`docker compose down` 后重新 `up`，历史与数据保持可用。
+- **保留的限制：** M5 Docker VM 当前只分配约 **8 GB**，现有 workload 可运行，但未来较大模型可能需要在 Docker Desktop 图形界面提高至约 28 GB。固定内网 IP 的路由器 DHCP 保留尚未核对。一个源数据中已有的不完整运行 `run_0817844b3ebe43d1908625a3506f7bd8d` 在旧 Mac 和 M5 都缺报告结果（404），不是迁移损坏。首次完整构建时间未精确记录；内存峰值为采样值，可能漏掉瞬时峰值。

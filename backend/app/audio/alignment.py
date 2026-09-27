@@ -89,6 +89,7 @@ class WhisperXAlignment:
 def create_alignment_provider(name: str, data_dir: Path | None = None) -> AlignmentProvider:
     if name == "whisperx":
         if data_dir is not None:
+            # 容器可在镜像内预装模型；仅在未显式指定缓存时才回退到数据目录。
             os.environ.setdefault("NLTK_DATA", str(data_dir / "models/nltk"))
             os.environ.setdefault("TORCH_HOME", str(data_dir / "models/torch"))
             os.environ.setdefault("HF_HOME", str(data_dir / "models/hf"))

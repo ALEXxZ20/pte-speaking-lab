@@ -26,17 +26,17 @@ fi
 
 LISTENER=$(lsof -nP -t -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)
 if [ -n "$LISTENER" ]; then
-  COMMAND=$(ps -p "$LISTENER" -o command= 2>/dev/null || true)
   CWD=$(lsof -a -p "$LISTENER" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1)
-  case "$COMMAND" in
-    *scripts/serve_lan.py*)
-      if [ "$CWD" = "$ROOT" ]; then
-        printf '%s\n' "$LISTENER" > "$PID_FILE"
-        echo "内网服务已在运行：http://$BIND_IP:$PORT/"
-        exit 0
-      fi ;;
-  esac
-  echo "端口 $PORT 已被其他程序占用（PID $LISTENER）。" >&2
+  # 受沙箱限制时 ps 可能不可用；以当前目录、LaunchAgent 和认证响应三项确认服务归属。
+  if [ "$CWD" = "$ROOT" ] && launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
+    STATUS=$(curl --noproxy '*' -s -o /dev/null -w '%{http_code}' --connect-timeout 1 "http://$BIND_IP:$PORT/" || true)
+    if [ "$STATUS" = 401 ]; then
+      printf '%s\n' "$LISTENER" > "$PID_FILE"
+      echo "内网服务已在运行：http://$BIND_IP:$PORT/"
+      exit 0
+    fi
+  fi
+  echo "端口 ${PORT} 已被其他程序占用（PID ${LISTENER}）。" >&2
   exit 1
 fi
 rm -f "$PID_FILE"

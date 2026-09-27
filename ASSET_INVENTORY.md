@@ -148,6 +148,14 @@
 | `docs/MVP_ACCEPTANCE.md` | MVP 双边真实样本验收记录。 |
 | `docs/RELEASE_1.0_TO_v1.99.md` | 从 `1.0` 基线到 `v1.99` 的功能、迁移、验证和限制汇总。 |
 | `docs/M5_LOCAL_AUDIO_DEPLOYMENT_PLAN.md` | M5 Pro 内网音频计算节点的分阶段部署方案。 |
+| `docs/M5_DOCKER_DEPLOYMENT.md` | M5 Pro 单容器部署、SSH、数据迁移和实机验收步骤。 |
+| `docs/M5_MODEL_NOTICES.md` | 镜像中计划预装的模型、来源、版本与第三方许可摘要。 |
+| `Dockerfile` | 原生 ARM64 多阶段构建：前端、Python 依赖、模型预装与运行镜像。 |
+| `compose.yaml` | 一个应用容器、固定内网 IP 端口映射、持久数据挂载和内存上限。 |
+| `.dockerignore` | 阻止密钥、录音、数据库与本机依赖进入构建上下文。 |
+| `.env.docker.example` | M5 Docker 运行配置的公开模板，不含真实密码。 |
+| `scripts/prefetch_container_models.py` | 构建期固定模型下载、断网加载和模型清单校验。 |
+| `scripts/export_m5_data.py` | SQLite 一致备份、资产复制与迁移 SHA-256 核对。 |
 | `docs/EXTERNAL_SPEECH_DIAGNOSIS_REVIEW.md` | 外部口语诊断源码的功能审查、Edge TTS 路径及与本项目的技术选型对比。 |
 | `docs/TTS_COMPARISON.md` | TTS 参考模式的数据流、边界、实测与维护说明。 |
 

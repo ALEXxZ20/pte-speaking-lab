@@ -1,4 +1,5 @@
 """Optional local phone signal; never invokes OpenPronounce's default gTTS path."""
+import os
 import wave
 from pathlib import Path
 
@@ -9,6 +10,11 @@ class OpenPronouncePhones:
     def assess(self, wav_path: Path, tokens: list[dict], timed_tokens: list[dict], target_index: int) -> dict:
         import numpy as np
         from openpronounce import phones
+
+        # 镜像内预装固定版本模型时，直接从本地路径加载，避免运行时联网拉取。
+        local_model = os.environ.get("PTE_OPENPRONOUNCE_MODEL_PATH")
+        if local_model:
+            phones.PHONE_MODEL_NAME = local_model
 
         by_index = {token["index"]: token for token in timed_tokens if token.get("quality") == "medium"}
         included = [i for i in range(max(0, target_index - 1), min(len(tokens), target_index + 2)) if i in by_index]
