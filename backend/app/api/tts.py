@@ -19,6 +19,7 @@ class GenerateRequest(BaseModel):
 
 @router.get("/settings")
 def settings(request: Request) -> dict:
+    """只公开 TTS 可用状态与非敏感选项；不泄露后端密钥。"""
     current = request.app.state.settings
     return {"enabled": current.tts_enabled and EDGE_VERSION is not None, "voices": VOICES, "default_voice": current.tts_voice,
             "default_rate": current.tts_rate, "gap_ms": current.tts_gap_ms,
@@ -27,11 +28,13 @@ def settings(request: Request) -> dict:
 
 @router.post("/segments")
 def segments(body: PreviewRequest) -> dict:
+    """预览建议分段，最终分段仍由用户核对后提交。"""
     return {"segments": preview_segments(body.text)}
 
 
 @router.post("/generations")
 def create_generation(body: GenerateRequest, request: Request) -> dict:
+    """在线生成失败时给出可重试错误，不影响原有上传比较。"""
     try:
         return generate(body.segments, body.voice, body.rate, request.app.state.settings)
     except ValueError as exc:

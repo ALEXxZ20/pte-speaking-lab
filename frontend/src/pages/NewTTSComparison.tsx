@@ -3,6 +3,7 @@ import { createComparison, generateTTS, getTTSSettings, importScreenshot, previe
 import { empty, PictureInput, ReviewPanel, SampleForm, type FormSide } from './NewComparison'
 
 export default function NewTTSComparison() {
+  // 用户侧输入沿用已有双边表单，参考侧只接收服务端生成的音频与脚本。
   const [title, setTitle] = useState('')
   const [questionType, setQuestionType] = useState('DI')
   const [readingText, setReadingText] = useState('')
@@ -21,6 +22,7 @@ export default function NewTTSComparison() {
 
   useEffect(() => { getTTSSettings().then(value => { setSettings(value); setVoice(value.default_voice); setRate(value.default_rate) }).catch(error => setMessage(String(error))) }, [])
   async function recognizeReading(file: File) {
+    // OCR 只是草稿；生成前仍需用户核对全文与分段。
     setReadingScreenshot(file); setReadingScreenshotId(null); setMessage('正在识别朗读稿…')
     try {
       const asset = await upload('screenshots', file)
@@ -30,6 +32,7 @@ export default function NewTTSComparison() {
     } catch (error) { setMessage(`朗读稿识别失败：${String(error)}`) }
   }
   async function recognizeUser(file: File) {
+    // 猩际截图同时提供转写与词色候选，后续可单独人工复核。
     setSide(previous => ({ ...previous, screenshot: file, screenshotId: null, draft: null, recognizing: true }))
     try {
       const asset = await upload('screenshots', file)
@@ -38,10 +41,12 @@ export default function NewTTSComparison() {
     } catch (error) { setSide(previous => ({ ...previous, recognizing: false })); setMessage(`我的截图识别失败：${String(error)}`) }
   }
   async function split() {
+    // 修改朗读稿后清空旧分段，避免合成过期文本。
     try { setSegments((await previewTTSSegments(readingText)).segments); setMessage('请检查断句；可逐段修改生成时朗读的文字。') }
     catch (error) { setMessage(`断句失败：${String(error)}`) }
   }
   async function submit(event: FormEvent) {
+    // 先取得最终合成资产，再复用 Comparison 的双边合同保存不可变样本。
     event.preventDefault()
     if (!side.audio || !side.screenshotId || !side.transcript.trim() || !side.pronunciation || !side.fluency || !side.content || !segments.length || segments.some(item => !item.trim())) {
       setMessage('请填写我的录音、猩际截图和三项分数，并预览及检查朗读分段。'); return

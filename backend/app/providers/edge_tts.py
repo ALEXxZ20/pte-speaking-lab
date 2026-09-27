@@ -75,6 +75,7 @@ async def _request_segment(text: str, voice: str, rate: str, timeout_s: int) -> 
 
 
 def _decode_mp3(audio: bytes, settings: Settings) -> np.ndarray:
+    """把在线返回的压缩音频统一转为 PCM，使段长和词时间共用采样基准。"""
     result = subprocess.run([settings.ffmpeg_bin, "-hide_banner", "-loglevel", "error", "-nostdin", "-i", "pipe:0",
                              "-f", "s16le", "-ac", "1", "-ar", str(SAMPLE_RATE), "pipe:1"],
                             input=audio, capture_output=True, timeout=30)
@@ -97,6 +98,7 @@ def _quiet_edge_s(samples: np.ndarray, trailing: bool) -> float:
 
 
 def _cache_key(segments: list[str], voice: str, rate: str, gap_ms: int) -> str:
+    """把会影响合成结果的参数和 Provider 版本都纳入缓存键。"""
     payload = json.dumps([VERSION, segments, voice, rate, gap_ms], ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(payload.encode()).hexdigest()
 
@@ -178,6 +180,7 @@ def generate(segments: list[str], voice: str, rate: str, settings: Settings) -> 
 
 
 def _result(row, cached: bool) -> dict:
+    """将数据库 JSON 列还原为前端可审查的生成结果。"""
     return {"id": row["id"], "audio_asset_id": row["audio_asset_id"], "text": row["text"],
             "voice": row["voice"], "rate": row["rate"], "segments": json.loads(row["segments_json"]),
             "word_boundaries": json.loads(row["word_boundaries_json"]),
