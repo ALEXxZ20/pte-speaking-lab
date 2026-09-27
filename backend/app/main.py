@@ -12,6 +12,7 @@ from app.api.health import router as health_router
 from app.api.assets import router as assets_router
 from app.api.comparisons import router as comparisons_router
 from app.api.runs import router as runs_router
+from app.api.tts import router as tts_router
 from app.config import Settings
 from app.persistence.database import migrate
 
@@ -30,6 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(assets_router)
     application.include_router(comparisons_router)
     application.include_router(runs_router)
+    application.include_router(tts_router)
     if configuration.pte_lan_mode:
         dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
         if not (dist / "index.html").is_file():

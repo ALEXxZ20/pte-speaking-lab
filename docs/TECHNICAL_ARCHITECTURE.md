@@ -6,9 +6,15 @@
 
 前端为 React + Vite + Tailwind + WaveSurfer；后端为 FastAPI；SQLite 保存结构化记录，filesystem 保存音频和截图；FFmpeg 做音频转换。本机开发是 Vite 5173 代理 API 8000。内网部署先构建前端，FastAPI 在单一 8765 端口同源提供网页/API/录音，并用 HTTP Basic 覆盖所有路径。`scripts/start.sh`、`stop.sh`、`restart.sh` 通过 macOS `launchd` 管理服务；plist、PID 与日志位于 Git 忽略的 `data/`。
 
-`Comparison` 由一个 `Exercise` 与两个 `ResponseSample` 组成。Exercise 的 `reading_text_raw` 是**共同计划朗读的原文**；可从完整英文朗读稿截图 OCR 后编辑，原图与 OCR 草稿分别保存。user 样本是人的录音；benchmark 样本是用户上传的**已生成 AI 参考录音**。每侧保存上传音频、猩际截图、截图 OCR 草稿、最终编辑稿、可选复制稿、三项原始分数和词色状态。两侧实际转写可以在个别词和尾部不同。AI 参考不等于标准发音，Content 只存外部分数。
+`Comparison` 由一个 `Exercise` 与两个 `ResponseSample` 组成。Exercise 的 `reading_text_raw` 是**共同计划朗读的原文**；可从完整英文朗读稿截图 OCR 后编辑，原图与 OCR 草稿分别保存。user 样本是人的录音；benchmark 样本可以是用户上传且附带猩际资料的**已生成 AI 高分参考录音**，也可以是从核对后朗读稿在线生成的 **Edge TTS 练习参考**。上传模式两侧分别保存猩际截图、OCR/编辑稿、可选复制稿、三项分数和词色。TTS 参考侧没有这些猩际数据，只保存生成脚本、WAV、词时间与接缝。两种参考都不是标准发音，Content 只存外部分数。
 
 ## 2. 一次比较的具体处理过程
+
+### TTS 参考支路
+
+`frontend/src/pages/NewTTSComparison.tsx` 复用上传模式的朗读稿截图输入和用户样本表单，调用 `GET /api/v1/tts/settings` 查询可用音色、`POST /api/v1/tts/segments` 预览可编辑断句，最后调用 `POST /api/v1/tts/generations`。后端 `providers/edge_tts.py` 对每段请求在线音频和 WordBoundary，FFmpeg 解码至 24 kHz 单声道 PCM，按实际采样长度累积全局时间。分段接缝若已有自然安静区达到 `TTS_GAP_MS`，就不补零；每处接缝都记录以便流利度排除。脚本、分段、音色、语速、词事件、接缝、provider 版本及生成 WAV 由迁移 0007 的 `tts_generations` 和 `audio_assets` 保存，缓存键含所有生成参数。
+
+`analysis/runner.py` 在 TTS 侧调用 `audio/alignment.py::tts_word_boundaries`：只对与最终脚本同词、同顺序的 WordBoundary 提供可回听位置，识别不符或缺失的词降级。**这不是独立 ASR，也没有 TTS 侧猩际逐词色或分数。**用户侧仍走现有对齐流程。`engines/fluency.py` 排除接缝附近的停顿，保留整体 WPM 并标示其含合成段间时间、质量较低。上传模式的分析路径与旧报告 JSON 均不改写。生成接口为同步请求，页面有等待/可重试状态；当前没有后台队列或中断续传。
 
 ```text
 浏览器上传两侧音频/截图 → 资产 ID + SHA-256 + 相对路径

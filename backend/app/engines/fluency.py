@@ -39,6 +39,13 @@ def analyze_fluency(sample_id: str, sample: dict, audio: dict, alignment: dict,
         pairs = [(timed[i - 1]["end_s"], timed[i]["start_s"])
                  for i in range(1, len(tokens)) if i - 1 in timed and i in timed]
         gap_quality = "low" if pairs else "unavailable"
+    seams = audio.get("tts", {}).get("seam_intervals", [])
+    # 合成时补入的静音是制作痕迹，不能写成说话者自然停顿。
+    if seams:
+        pairs = [(start, end) for start, end in pairs if not any(
+            start - 0.05 <= seam.get("boundary_s", seam["start_s"]) <= end + 0.05 or
+            max(start, seam["start_s"]) < min(end, seam["end_s"]) for seam in seams)]
+        gap_quality = "low" if gap_quality != "unavailable" else gap_quality
     pauses = [(start, end) for start, end in pairs if (end - start) * 1000 >= pause_min_ms]
     for start, end in pauses:
         items.append(evidence(sample_id, "fluency", "pause_candidate", "measured", gap_source, gap_quality, VERSION,
@@ -46,7 +53,7 @@ def analyze_fluency(sample_id: str, sample: dict, audio: dict, alignment: dict,
                               details={"pause_min_ms": pause_min_ms, "long_pause_ms": long_pause_ms}))
     if gap_quality != "unavailable":
         durations = [(end - start) * 1000 for start, end in pauses]
-        extra = {"basis": gap_source, "sample_count": len(pauses)}
+        extra = {"basis": gap_source, "sample_count": len(pauses), "excluded_synthetic_seams": len(seams)}
         output.update({
             "pause_count": metric(len(pauses), "count", gap_quality, **extra),
             "long_pause_count": metric(sum(x >= long_pause_ms for x in durations), "count", gap_quality, **extra),
@@ -78,7 +85,7 @@ def analyze_fluency(sample_id: str, sample: dict, audio: dict, alignment: dict,
         if current:
             phrases.append(current)
         lengths = [phrase[-1]["end_s"] - phrase[0]["start_s"] for phrase in phrases]
-        phrase_quality = "low" if not usable_vad else "medium"
+        phrase_quality = "low" if not usable_vad or seams else "medium"
         output["mean_phrase_s"] = metric(round(mean(lengths), 2), "s", phrase_quality, phrase_count=len(phrases))
         output["mean_phrase_words"] = metric(round(mean(len(phrase) for phrase in phrases), 2), "words", phrase_quality, phrase_count=len(phrases))
         window_start = first
@@ -104,4 +111,5 @@ def analyze_fluency(sample_id: str, sample: dict, audio: dict, alignment: dict,
                                   details=item["details"]))
     return {"dimension": "fluency", "algorithm_version": VERSION, "status": "partial" if any(m["quality"] in {"low", "unavailable"} for m in output.values()) else "complete",
             "metrics": output, "evidence": items, "xingji_score": sample.get("fluency_score"),
-            "limitations": ["Candidate pauses depend on VAD or word-gap quality; different texts can have different timing demands."]}
+            "limitations": ["Candidate pauses depend on VAD or word-gap quality; different texts can have different timing demands."] +
+                           (["TTS 分段接缝附近的停顿已从候选排除；整段 WPM 仍含分段间隔。"] if seams else [])}

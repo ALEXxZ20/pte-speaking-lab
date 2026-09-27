@@ -2,8 +2,8 @@ import { useEffect, useState, type ClipboardEvent, type FormEvent } from 'react'
 import { createComparison, importScreenshot, previewScreenshot, upload, type Comparison, type Draft, type Sample, type SampleRecord, updateSample } from '../api/client'
 
 type Role = 'user' | 'benchmark'
-type FormSide = { audio: File | null; screenshot: File | null; screenshotId: string | null; ocrText: string; transcript: string; copied: string; draft: Draft | null; pronunciation: string; fluency: string; content: string; recognizing: boolean }
-const empty = (): FormSide => ({ audio: null, screenshot: null, screenshotId: null, ocrText: '', transcript: '', copied: '', draft: null, pronunciation: '', fluency: '', content: '', recognizing: false })
+export type FormSide = { audio: File | null; screenshot: File | null; screenshotId: string | null; ocrText: string; transcript: string; copied: string; draft: Draft | null; pronunciation: string; fluency: string; content: string; recognizing: boolean }
+export const empty = (): FormSide => ({ audio: null, screenshot: null, screenshotId: null, ocrText: '', transcript: '', copied: '', draft: null, pronunciation: '', fluency: '', content: '', recognizing: false })
 const names: Record<Role, string> = { user: '我的回答', benchmark: 'AI 生成的高分参考录音' }
 const colors = { red: '红色', yellow: '黄色', green: '绿色', unknown: '未知' }
 function transcriptDifference(visible: string, copied: string) {
@@ -19,7 +19,7 @@ function ScoreField({ label, value, max, change }: { label: string; value: strin
   return <label className="block text-sm text-slate-700"><span className="font-medium">{label}</span><span className="mt-1 flex items-center gap-2"><input className="field w-24" type="number" min="0" max={max} step="0.1" value={value} onChange={event => change(event.target.value)} required /><span className="text-slate-500">/ {max}</span></span></label>
 }
 
-function PictureInput({ label, file, onFile }: { label: string; file: File | null; onFile: (file: File) => void }) {
+export function PictureInput({ label, file, onFile }: { label: string; file: File | null; onFile: (file: File) => void }) {
   function paste(event: ClipboardEvent<HTMLDivElement>) {
     const image = [...event.clipboardData.items].find(item => item.type.startsWith('image/'))?.getAsFile()
     if (image) { event.preventDefault(); onFile(new File([image], `粘贴截图-${Date.now()}.png`, { type: image.type })) }
@@ -27,7 +27,7 @@ function PictureInput({ label, file, onFile }: { label: string; file: File | nul
   return <div className="text-sm font-medium"><label>{label}<input className="file-field mt-2" type="file" accept="image/png,image/jpeg" onChange={event => { const file = event.target.files?.[0]; if (file) onFile(file) }} /></label><div tabIndex={0} onPaste={paste} className="mt-2 rounded-lg border border-dashed border-indigo-300 bg-indigo-50 p-3 text-sm font-normal text-indigo-800 focus:outline-indigo-500">点击这里后按 ⌘V 粘贴截图{file && ` · 已选 ${file.name}`}</div></div>
 }
 
-function SampleForm({ role, value, change, recognize }: { role: Role; value: FormSide; change: (next: FormSide) => void; recognize: (file: File) => void }) {
+export function SampleForm({ role, value, change, recognize }: { role: Role; value: FormSide; change: (next: FormSide) => void; recognize: (file: File) => void }) {
   const set = (field: keyof FormSide, next: string | File | null) => change({ ...value, [field]: next })
   return <section className="panel space-y-5"><div><p className="text-xs font-semibold uppercase tracking-widest text-indigo-600">{role === 'user' ? '01' : '02'} · Response Sample</p><h2 className="mt-1 text-xl font-semibold">{names[role]}</h2>{role === 'benchmark' && <p className="mt-1 text-sm text-slate-600">上传已生成的 AI 音频，以及这段音频在猩际 PTE 得到的转写、截图和三项分数。本项目不生成朗读音频。</p>}</div>
     <label className="block text-sm font-medium">录音文件 <span className="text-red-600">*</span><input className="file-field mt-2" type="file" accept="audio/*,.m4a,.mp4,.webm,.wav,.mp3" onChange={event => set('audio', event.target.files?.[0] || null)} /></label>

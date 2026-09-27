@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     alignment_provider: str = "none"
     pronunciation_provider: str = "none"
     asr_provider: str = "none"
+    tts_enabled: bool = True
+    tts_voice: str = "en-US-AriaNeural"
+    tts_rate: str = "+0%"
+    tts_gap_ms: int = 300
+    tts_timeout_s: int = 90
     openai_api_key: SecretStr = SecretStr("")
     openai_analysis_model: str = ""
     openai_base_url: str = ""

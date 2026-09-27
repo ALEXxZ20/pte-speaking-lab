@@ -19,6 +19,10 @@ def now() -> str:
 def _assert_assets(db: sqlite3.Connection, sample: SampleInput) -> None:
     if sample.audio_asset_id and not db.execute("SELECT 1 FROM audio_assets WHERE id=?", (sample.audio_asset_id,)).fetchone():
         raise ValueError("audio_asset_not_found")
+    if sample.audio_origin == "edge_tts":
+        generated = db.execute("SELECT text FROM tts_generations WHERE audio_asset_id=?", (sample.audio_asset_id,)).fetchone()
+        if not generated or generated["text"] != (sample.transcript_raw or ""):
+            raise ValueError("tts_audio_and_script_mismatch")
     for screenshot_id in sample.color_screenshot_asset_ids:
         if not db.execute("SELECT 1 FROM screenshot_assets WHERE id=?", (screenshot_id,)).fetchone():
             raise ValueError("screenshot_asset_not_found")
@@ -105,5 +109,6 @@ def get_comparison(path, comparison_id: str) -> dict | None:
 
 def list_history(path, limit: int = 50) -> list[dict]:
     with connect(path) as db:
-        rows = db.execute("SELECT c.id,c.created_at,e.question_type,e.title FROM comparisons c JOIN exercises e ON e.id=c.exercise_id ORDER BY c.created_at DESC LIMIT ?", (limit,)).fetchall()
-        return [dict(row) for row in rows]
+        rows = db.execute("SELECT c.id,c.created_at,e.question_type,e.title,b.input_payload_json FROM comparisons c JOIN exercises e ON e.id=c.exercise_id JOIN response_samples b ON b.id=c.benchmark_sample_id ORDER BY c.created_at DESC LIMIT ?", (limit,)).fetchall()
+        return [{"id": row["id"], "created_at": row["created_at"], "question_type": row["question_type"],
+                 "title": row["title"], "comparison_mode": "tts" if json.loads(row["input_payload_json"]).get("audio_origin") == "edge_tts" else "uploaded"} for row in rows]

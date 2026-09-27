@@ -3,7 +3,7 @@ import json
 import time
 from pathlib import Path
 
-from app.audio.alignment import NoAlignment, create_alignment_provider
+from app.audio.alignment import NoAlignment, create_alignment_provider, tts_word_boundaries
 from app.audio.acoustics import extract_bounded
 from app.audio.prepare import prepare_audio
 from app.comparison.service import compare
@@ -18,7 +18,7 @@ from app.persistence.samples import now, uid
 from app.providers.openai_llm import OpenAILLMProvider, OpenAICompatibleLLMProvider
 from app.providers.openpronounce import OpenPronouncePhones
 
-VERSION = "analysis-v4"
+VERSION = "analysis-v5"
 
 
 def _snapshot(db, sample_id: str) -> tuple[str, dict]:
@@ -35,13 +35,23 @@ def _prepare_one(sample_id: str, sample: dict, settings: Settings, pronunciation
     audio = prepare_audio(sample["audio_asset_id"], settings)
     wav_path = settings.data_dir / audio["wav_path"]
     alignment_error = None
-    try:
-        provider = create_alignment_provider(settings.alignment_provider, settings.data_dir)
-        alignment = provider.align(wav_path, sample["tokens"], audio["duration_s"])
-    except Exception as exc:
-        alignment_error = type(exc).__name__
-        alignment = NoAlignment().align(wav_path, sample["tokens"], audio["duration_s"])
-        alignment["reason"] = "alignment_failed"
+    if sample.get("audio_origin") == "edge_tts":
+        with connect(settings.database_path) as db:
+            source = db.execute("SELECT word_boundaries_json,seam_intervals_json,voice,rate FROM tts_generations WHERE audio_asset_id=?",
+                                (sample["audio_asset_id"],)).fetchone()
+        if not source:
+            raise ValueError("tts_generation_not_found")
+        audio["tts"] = {"voice": source["voice"], "rate": source["rate"],
+                        "seam_intervals": json.loads(source["seam_intervals_json"])}
+        alignment = tts_word_boundaries(sample["tokens"], json.loads(source["word_boundaries_json"]), audio["duration_s"])
+    else:
+        try:
+            provider = create_alignment_provider(settings.alignment_provider, settings.data_dir)
+            alignment = provider.align(wav_path, sample["tokens"], audio["duration_s"])
+        except Exception as exc:
+            alignment_error = type(exc).__name__
+            alignment = NoAlignment().align(wav_path, sample["tokens"], audio["duration_s"])
+            alignment["reason"] = "alignment_failed"
     pronunciation = analyze_pronunciation(sample_id, sample, alignment, wav_path, pronunciation_provider)
     fluency = analyze_fluency(sample_id, sample, audio, alignment,
                               settings.pause_min_ms, settings.long_pause_ms, settings.very_long_pause_ms)
@@ -101,7 +111,7 @@ def run_comparison(comparison_id: str, settings: Settings, allow_cloud: bool = F
                   "pipeline_version": VERSION, "config": config,
                   "revision_ids": {role: snapshots[role][0] for role in snapshots},
                   "samples": results, "comparison": comparison_result, "diagnosis": diagnosis, "summaries": summaries,
-                  "limitations": ["Benchmark is not a standard answer or official scoring reference.",
+                  "limitations": ["TTS audio is an online-generated practice reference without Xingji scoring." if right["sample"].get("audio_origin") == "edge_tts" else "Benchmark is not a standard answer or official scoring reference.",
                                   "Content scores are stored Xingji inputs; no content scoring is performed."]}
         report = plain(report)
         with connect(settings.database_path) as db:

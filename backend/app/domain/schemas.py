@@ -37,14 +37,14 @@ class PauseLabel(BaseModel):
 
 class SampleInput(BaseModel):
     role: Literal["user", "benchmark"]
-    audio_origin: Literal["human_recording", "ai_generated", "legacy_unspecified"] = "legacy_unspecified"
+    audio_origin: Literal["human_recording", "ai_generated", "edge_tts", "legacy_unspecified"] = "legacy_unspecified"
     audio_asset_id: str | None = None
     color_screenshot_asset_ids: list[str] = Field(default_factory=list)
     pronunciation_score: Score | None = None
     fluency_score: Score | None = None
     content_score: Score | None = None
     transcript_raw: str | None = None
-    transcript_source: Literal["xingji_copy", "manual_correction", "screenshot_ocr", "screenshot_ocr_edited"] | None = None
+    transcript_source: Literal["xingji_copy", "manual_correction", "screenshot_ocr", "screenshot_ocr_edited", "tts_script"] | None = None
     ocr_transcript_raw: str | None = None
     copied_transcript_raw: str | None = None
     tokens: list[Token] = Field(default_factory=list)
@@ -56,6 +56,11 @@ class SampleInput(BaseModel):
             raise ValueError("user_audio_cannot_be_ai_generated")
         if self.role == "benchmark" and self.audio_origin == "human_recording":
             raise ValueError("benchmark_audio_must_be_ai_generated")
+        if self.audio_origin == "edge_tts":
+            if self.role != "benchmark" or self.transcript_source != "tts_script":
+                raise ValueError("tts_requires_benchmark_script")
+            if self.color_screenshot_asset_ids or any((self.pronunciation_score, self.fluency_score, self.content_score)):
+                raise ValueError("tts_has_no_xingji_results")
         expected = tokenize(self.transcript_raw or "")
         if not self.tokens and expected:
             self.tokens = [Token(index=t["index"], surface=t["surface"], normalized=t["normalized"]) for t in expected]
@@ -69,6 +74,8 @@ class SampleInput(BaseModel):
                 raise ValueError("color_requires_review_or_candidate_source")
             if actual.color_review_status == "candidate" and not actual.color_source_screenshot_id:
                 raise ValueError("candidate_requires_screenshot_source")
+            if self.audio_origin == "edge_tts" and (actual.color != "unknown" or actual.color_review_status != "unreviewed"):
+                raise ValueError("tts_has_no_word_colors")
         if any(p.after_token_index is not None and not (0 <= p.after_token_index < len(expected)) for p in self.pause_labels):
             raise ValueError("pause_position_out_of_range")
         if len(set(self.color_screenshot_asset_ids)) != len(self.color_screenshot_asset_ids):

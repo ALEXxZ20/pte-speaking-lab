@@ -34,7 +34,7 @@ OPENAI_API_KEY=你的CLIProxyAPI访问密钥
 
 若改用官方 OpenAI API，把 `LLM_PROVIDER` 设为 `openai`，`OPENAI_BASE_URL` 留空，填写独立的 OpenAI Platform API key 和受支持模型，再重启服务。ChatGPT Plus 订阅不提供该 API key；OpenAI Platform 独立计费。
 
-当前 AI 高分录音必须**由用户在项目外先生成并上传**，随后分别填写其猩际 PTE 三项分数和逐词截图。截图自动识别实际转写，复制文本可选；提交前可编辑 OCR 结果。共同朗读稿可直接输入，或上传/粘贴完整英文朗读稿截图后编辑文字。项目没有内置语音合成。
+“新建比较”继续使用用户在项目外生成并上传、且已取得猩际资料的 AI 高分参考录音。独立的“TTS 参考”入口可把核对过的英文朗读稿发送到在线 Microsoft Edge TTS，生成练习录音；只需填写用户侧猩际资料。合成参考没有猩际分数或词色，不称作高分样本。两种入口都支持朗读稿截图 OCR 后编辑。TTS 不使用 `OPENAI_API_KEY`，需要本机能访问外部在线语音服务；不会将用户录音发送给该服务。
 
 ## 3. 配置项全集
 
@@ -51,6 +51,11 @@ OPENAI_API_KEY=你的CLIProxyAPI访问密钥
 | `ALIGNMENT_PROVIDER` | `whisperx` 或 `none` | WhisperX CPU 词级对齐，或禁用。禁用/失败会降级时间相关结论。需先安装 `requirements-alignment.lock`。 |
 | `PRONUNCIATION_PROVIDER` | `none` | 保留的全局配置字段；安装 `requirements-pronunciation.lock` 后运行页默认勾选本地 OpenPronounce，可在单次运行中关闭。其音素候选未经校准，首次运行会下载本地模型，可能明显变慢。 |
 | `ASR_PROVIDER` | `none` | 预留字段；当前主流程从猩际截图 OCR 实际转写，不运行音频 ASR。 |
+| `TTS_ENABLED` | `true` | 开启/关闭独立的 Edge TTS 练习入口；关闭不影响上传参考比较。 |
+| `TTS_VOICE` | `en-US-AriaNeural` | TTS 入口默认音色；当前允许 `en-US-AriaNeural`、`en-US-EmmaMultilingualNeural`、`en-GB-RyanNeural`。 |
+| `TTS_RATE` | `+0%` | 默认语速；页面可选 -20% 到 +20%，服务端限制 ±50%。 |
+| `TTS_GAP_MS` | `300` | 分段接缝的目标最短安静区，已有自然静音足够时不再补零；不是语义停顿评分。 |
+| `TTS_TIMEOUT_S` | `90` | 每段在线合成最长等待秒数；失败限次重试后返回可重试错误。 |
 | `LLM_PROVIDER` | `openai`；本机为 `openai_compatible` | 选择官方 OpenAI Responses API 或兼容 Chat Completions 服务；每次运行仍需勾选。 |
 | `OPENAI_API_KEY` | 空 | 所选服务的后端访问密钥；本机代理使用 CLIProxyAPI 认可的密钥。空值时 AI 勾选不可用。 |
 | `OPENAI_ANALYSIS_MODEL` | 空；本机为 `gpt-6-sol` | 所选服务可用的模型 ID；需与 key 一同设置。 |

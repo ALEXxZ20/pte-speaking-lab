@@ -86,6 +86,7 @@ def delete_comparison(path: Path, data_dir: Path, comparison_id: str) -> dict | 
             row = db.execute("SELECT relative_path FROM audio_assets WHERE id=?", (asset_id,)).fetchone()
             if row:
                 files.extend([row["relative_path"], f"audio/derived/{asset_id}.16k.wav"])
+                db.execute("DELETE FROM tts_generations WHERE audio_asset_id=?", (asset_id,))
                 db.execute("DELETE FROM audio_assets WHERE id=?", (asset_id,))
         for asset_id in selection["delete_screenshot_ids"]:
             row = db.execute("SELECT relative_path FROM screenshot_assets WHERE id=?", (asset_id,)).fetchone()

@@ -13,7 +13,7 @@
 | `backend/app/engines/` | 发音、流利度两个独立引擎及交叉维度诊断。 |
 | `backend/app/comparison/` | 共同朗读稿覆盖、共享词与双边指标比较。 |
 | `backend/app/analysis/` | 分析运行编排、不可变输入快照和报告持久化。 |
-| `backend/app/providers/` | 可选官方 OpenAI、CLIProxyAPI 兼容接口文案改写与 OpenPronounce 音素候选适配器。 |
+| `backend/app/providers/` | 可选官方 OpenAI、CLIProxyAPI 文案改写，OpenPronounce 音素候选，以及 Edge TTS 在线参考录音适配器。 |
 | `backend/app/persistence/` | SQLite 连接、迁移、样本修订和删除清理。 |
 | `backend/tests/` | 后端单元、API、退化行为与内网保护测试。 |
 | `frontend/src/api/` | 浏览器与后端 API 的请求及 TypeScript 类型。 |
@@ -51,6 +51,7 @@
 | `backend/app/api/comparisons.py` | 新建/读取/删除比较、样本修订、截图 OCR 预览与导入草稿。 |
 | `backend/app/api/health.py` | 服务健康检查。 |
 | `backend/app/api/runs.py` | 启动分析、读取状态/报告、回听音频及查询 Provider 可用性。 |
+| `backend/app/api/tts.py` | TTS 设置、朗读稿断句预览、在线生成接口。 |
 | `backend/app/domain/schemas.py` | Pydantic 输入模型；验证双边角色、分数、词序与候选来源。 |
 | `backend/app/screenshots/mapper.py` | Tesseract OCR、彩色正文提取、逐词颜色检测及保守顺序映射。 |
 | `backend/app/audio/prepare.py` | 音频哈希验证、FFmpeg 标准化和语音活动区间提取。 |
@@ -65,6 +66,7 @@
 | `backend/app/analysis/runner.py` | 锁定样本版本，运行音频/双引擎/比较/诊断并保存不可变报告。 |
 | `backend/app/providers/openai_llm.py` | 可选官方 OpenAI 和 CLIProxyAPI 兼容接口文案改写；解析返回结构，证据 ID 在诊断层校验。 |
 | `backend/app/providers/openpronounce.py` | 本地音素候选；只处理可定位的目标词，不生成评分。 |
+| `backend/app/providers/edge_tts.py` | 分段请求在线 Edge TTS、保留词边界、解码拼接 WAV、记录接缝及缓存。 |
 | `backend/app/persistence/database.py` | SQLite 连接及按版本执行迁移。 |
 | `backend/app/persistence/samples.py` | 创建双边样本、验证资产、保存可编辑视图和不可变修订。 |
 | `backend/app/persistence/deletion.py` | 删除比较及专属文件，保留仍被其他比较引用的资产。 |
@@ -87,6 +89,7 @@
 | `backend/app/persistence/migrations/0004_shared_reading_text.sql` | 给 Exercise 增加共同朗读原文。 |
 | `backend/app/persistence/migrations/0005_screenshot_reading.sql` | 关联朗读稿截图/OCR 来源，并使词色支持 `candidate` 状态。 |
 | `backend/app/persistence/migrations/0006_repair_candidate_colors.sql` | 修复旧数据库未真正更新的词色约束，保留已有词记录。 |
+| `backend/app/persistence/migrations/0007_tts_generations.sql` | 保存 TTS 生成脚本、词时间、接缝、版本与音频资产关联。 |
 
 ## 后端测试
 
@@ -103,6 +106,7 @@
 | `backend/tests/test_llm_provider.py` | CLIProxyAPI 兼容请求路径、JSON 解析与地址校验。 |
 | `backend/tests/test_samples.py` | 双边资产、样本修订、数据校验、旧词色表迁移与共享文件删除。 |
 | `backend/tests/test_screenshot_mapping.py` | OCR 词序、重复词、低置信度与页眉排除。 |
+| `backend/tests/test_tts.py` | TTS 断句、接缝时间偏移、缓存、停顿排除及不可信词边界。 |
 
 ## 前端文件
 
@@ -120,6 +124,7 @@
 | `frontend/src/components/Waveform.tsx` | 音频波形、播放、证据位置跳转，以及同一页面内的互斥播放。 |
 | `frontend/src/components/AcousticPlot.tsx` | 可折叠的双边音高/能量曲线与相邻位置回听。 |
 | `frontend/src/pages/NewComparison.tsx` | 截图粘贴/选择、OCR 预览编辑、双边表单和词色复核。 |
+| `frontend/src/pages/NewTTSComparison.tsx` | 独立 TTS 入口：朗读稿、断句和音色选择、用户侧资料、生成并保存比较。 |
 | `frontend/src/pages/ComparisonDetail.tsx` | 比较运行选项、Provider 状态、历史报告、删除与复核入口。 |
 | `frontend/src/pages/ReportView.tsx` | 双边报告、紧邻时间轴的播放器、实际方法与缺失原因说明、数据专属总结、共享词、红黄词上下文和整段 WAV 定位回听。 |
 | `frontend/src/pages/Settings.tsx` | 配置状态和用户可见的设置说明。 |
@@ -144,6 +149,7 @@
 | `docs/RELEASE_1.0_TO_v1.99.md` | 从 `1.0` 基线到 `v1.99` 的功能、迁移、验证和限制汇总。 |
 | `docs/M5_LOCAL_AUDIO_DEPLOYMENT_PLAN.md` | M5 Pro 内网音频计算节点的分阶段部署方案。 |
 | `docs/EXTERNAL_SPEECH_DIAGNOSIS_REVIEW.md` | 外部口语诊断源码的功能审查、Edge TTS 路径及与本项目的技术选型对比。 |
+| `docs/TTS_COMPARISON.md` | TTS 参考模式的数据流、边界、实测与维护说明。 |
 
 ## 本地运行目录
 

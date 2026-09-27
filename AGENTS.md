@@ -10,8 +10,9 @@
 ## MVP boundaries
 
 - Focus on Pronunciation and Fluency. Store and display Xingji Content scores, but do not implement independent Content scoring, image understanding, or semantic content diagnosis.
-- A comparison contains one user `ResponseSample` and one high-score benchmark `ResponseSample`. The benchmark is an example of high performance, not an official answer or scoring standard.
+- A comparison contains one user `ResponseSample` and one benchmark `ResponseSample`. The benchmark can be an uploaded, Xingji-scored AI recording or an Edge TTS practice recording. Only the uploaded/scored mode is a high-score observation. Neither is an official answer or scoring standard.
 - Preserve source audio, Xingji scores, transcripts, colors, and pause labels. Do not replace source facts with model output.
+- Edge TTS input is a reviewed reading script, not Xingji output. The generated benchmark has no Xingji score, colors, or independently verified transcript. Keep its WordBoundary timing and segment seams separate from uploaded-sample alignment and exclude seam pauses from fluency evidence.
 - Xingji screenshots are the preferred input for observed transcript and word colors. Preserve the original image, OCR draft, optional copied transcript, final edited transcript, source labels, and immutable revisions. Include reliably mapped screenshot colors in the first analysis as low-confidence `candidate`; keep uncertain colors `unknown`. Human confirmation or correction changes the status to `confirmed` without rewriting old reports. Shared reading script screenshots are a separate source and must contain the full intended English text.
 - Never label an internally generated result as an official PTE or Xingji score.
 

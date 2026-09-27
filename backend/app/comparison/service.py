@@ -98,7 +98,8 @@ def compare(user_sample: dict, benchmark_sample: dict, user_alignment: dict, ben
                                    "quality": "low" if "low" in (left["quality"], right["quality"]) else "medium" if valid else "unavailable",
                                    "reason": None if valid else "metric_missing_or_unit_mismatch"}
     return {"algorithm_version": VERSION, "pronunciation_distribution_comparison": distributions,
+            "reference_kind": "tts" if benchmark_sample.get("audio_origin") == "edge_tts" else "uploaded",
             "shared_word_pairs": pairs, "transcript_comparison": transcript_comparison,
             "fluency_metric_differences": metric_differences,
-            "limitations": ["AI-generated benchmark is an observed reference, not a pronunciation standard.",
+            "limitations": ["TTS practice audio has no Xingji scores or word colors; its word timing is a synthesis event, not independent verification." if benchmark_sample.get("audio_origin") == "edge_tts" else "AI-generated benchmark is an observed reference, not a pronunciation standard.",
                             "Transcript omissions or changed words are not automatically pronunciation errors."]}

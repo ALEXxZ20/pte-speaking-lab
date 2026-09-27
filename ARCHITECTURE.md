@@ -1,9 +1,9 @@
 # PTE Speaking Lab — 技术架构
 
-**文档修订：** v1.99 · **日期：** 2026-09-26<br>
+**文档修订：** TTS 对比扩展 · **日期：** 2026-09-27<br>
 **产品范围：** 见 [PROJECT_SPEC.md](PROJECT_SPEC.md)。本文件中的阈值和算法口径是 MVP 初始配置，须随分析记录版本化；它们不是 PTE 官方评分规则。
 
-**当前代码实现与本设计蓝图的差异以 [TECHNICAL_ARCHITECTURE.md](docs/TECHNICAL_ARCHITECTURE.md) 为准。** 当前输入是共同朗读原文、用户真人录音，以及用户上传的 AI 生成高分录音；两侧各保留独立猩际实际转写、截图和分数。内网部署配置见 [CONFIGURATION.md](docs/CONFIGURATION.md)。
+**当前代码实现与本设计蓝图的差异以 [TECHNICAL_ARCHITECTURE.md](docs/TECHNICAL_ARCHITECTURE.md) 为准。** 上传参考模式保留共同原文、用户录音、用户上传的猩际高分参考录音和两侧独立猩际资料；TTS 模式保留用户资料，并从已核对朗读稿在线生成无猩际评分的参考录音。内网部署配置见 [CONFIGURATION.md](docs/CONFIGURATION.md)。
 
 `1.0` 基线后的实现变化、数据库迁移和验证记录见 [版本变更记录](docs/RELEASE_1.0_TO_v1.99.md)。
 
@@ -14,7 +14,7 @@
 | 部署 | 单机 macOS 开发或受密码保护的可信内网访问 | 适合 M2/24 GB，迁移到 M5 Pro/48 GB 不改业务结构。 |
 | 前端 | React + Vite + Tailwind + WaveSurfer | 表单、时间轴和片段回放。 |
 | 后端 | FastAPI + SQLite + 本地 filesystem + FFmpeg/ffprobe | 持久化与可复算音频预处理，避免额外服务。 |
-| 数据源 | 共同朗读原文 + 双边 ResponseSample；用户真人录音与已生成 AI 参考录音各自的猩际转写、分数、颜色截图和复核后的词级标签 | 分别保留原始来源与修订历史，不尝试重建猩际评分。 |
+| 数据源 | 共同朗读原文 + 双边 ResponseSample；上传参考侧可有猩际资料，Edge TTS 参考侧仅有生成脚本、音频与时间事件 | 分别保留来源与修订历史，不尝试重建猩际评分。 |
 | 分析 | Pronunciation 与 Fluency 独立运行；Diagnosis 最后融合 | 可以单独验证、单独失败与重跑。 |
 | AI | 官方 OpenAI 与兼容 Chat Completions 接口；Provider 契约隔离 | 可经本机 CLIProxyAPI 调用已授权模型，后续可扩展其他实现。 |
 | Content | 仅存储猩际值/量表 | 防止需求蔓延和误称自行评分。 |
@@ -24,6 +24,12 @@ ChatGPT Plus 订阅与 OpenAI API 是独立产品和计费渠道；使用官方 
 报告前端默认只渲染用户红黄词的上下文卡片，每张显示用户侧前后各三个转写词；只有比较层的 `shared_word_pairs` 给出明确位置配对时，才显示 AI 侧同词及其上下文。两侧片段各自依据可信词时间戳回听。切换到全部视图后，前端按录音时间渲染全部可定位证据，不截断尾部；无可靠时间戳的证据单独计数，不伪造定位。WaveSurfer 实例共享页面内播放焦点，新播放会暂停旧实例。
 
 ## 2. 组件与依赖方向
+
+### Edge TTS 参考路径（当前实现）
+
+浏览器在独立入口调用 `/api/v1/tts/segments` 预览标点/段落断句，用户可逐段编辑；`/api/v1/tts/generations` 依次向在线 Edge TTS 请求每段音频及 WordBoundary。后端用 FFmpeg 将返回 MP3 解码为 24 kHz 单声道 PCM，按实际 PCM 长度计算偏移；段间若自然安静区不足配置目标，才补充静音。合成 WAV、最终脚本、音色、语速、词事件和每一处接缝保存在 SQLite 与相对路径资产中。相同脚本、分段、音色、语速、接缝目标和 provider 版本命中缓存。
+
+分析时该侧以 WordBoundary 与最终脚本词序做保守精确匹配；不符的词位置为不可信，不运行额外 ASR。用户侧继续用既有 WhisperX 对齐。两侧仍分别运行 Pronunciation/Fluency；TTS 侧没有猩际词色和分数。Fluency 排除接缝附近的停顿候选，整体 WPM 仍包含分段时长且标低质量。比较层和 Diagnosis 维持现有输入界面，报告携带 `reference_kind=tts` 并显示限制。生成失败不影响上传参考模式，旧报告 JSON 不迁移。此路径是单次同步请求；后台队列和中断恢复尚未实现。
 
 ```text
 React UI ──HTTP──> FastAPI
@@ -65,14 +71,14 @@ class PauseLabelInput:
 
 class ResponseSample:
     role: Literal["user", "benchmark"]
-    audio_origin: Literal["human_recording", "ai_generated", "legacy_unspecified"]
+    audio_origin: Literal["human_recording", "ai_generated", "edge_tts", "legacy_unspecified"]
     audio_asset_id: str | None   # 草稿可空；分析时必须有音频
     color_screenshot_asset_ids: list[str]  # 逐词颜色原图
     pronunciation_score: Score | None
     fluency_score: Score | None
     content_score: Score | None
     transcript_raw: str | None  # 直接粘贴的猩际转写；分析前校验
-    transcript_source: Literal["xingji_copy", "manual_correction", "screenshot_ocr", "screenshot_ocr_edited"] | None
+    transcript_source: Literal["xingji_copy", "manual_correction", "screenshot_ocr", "screenshot_ocr_edited", "tts_script"] | None
     tokens: list[TokenInput]
     pause_labels: list[PauseLabelInput]
 
