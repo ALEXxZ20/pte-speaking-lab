@@ -14,7 +14,7 @@ function releaseAudioFocus(wave: WaveSurfer) {
   if (activePlayer === wave) activePlayer = null
 }
 
-export function Waveform({ url, jump, label }: { url: string; jump: Jump; label: string }) {
+export function Waveform({ url, jump, label, height = 80 }: { url: string; jump: Jump; label: string; height?: number }) {
   const container = useRef<HTMLDivElement>(null)
   const player = useRef<WaveSurfer | null>(null)
   const [ready, setReady] = useState(false)
@@ -28,7 +28,7 @@ export function Waveform({ url, jump, label }: { url: string; jump: Jump; label:
     setPlaying(false)
     import('wavesurfer.js').then(({ default: WaveSurfer }) => {
       if (disposed || !container.current) return
-      const created = WaveSurfer.create({ container: container.current, url, height: 80, waveColor: '#a5b4fc', progressColor: '#4f46e5', cursorColor: '#312e81' })
+      const created = WaveSurfer.create({ container: container.current, url, height, waveColor: '#a5b4fc', progressColor: '#4f46e5', cursorColor: '#312e81' })
       wave = created
       player.current = created
       created.on('ready', () => setReady(true))
@@ -38,7 +38,7 @@ export function Waveform({ url, jump, label }: { url: string; jump: Jump; label:
       created.on('error', () => { releaseAudioFocus(created); setError('录音无法播放，请检查音频文件。') })
     }).catch(() => setError('无法载入波形播放器。'))
     return () => { disposed = true; if (wave) { releaseAudioFocus(wave); wave.destroy() }; player.current = null }
-  }, [url])
+  }, [url, height])
   useEffect(() => {
     const wave = player.current
     if (ready && jump && wave) {
@@ -60,5 +60,5 @@ export function Waveform({ url, jump, label }: { url: string; jump: Jump; label:
     player.current?.setPlaybackRate(next)
     setRate(next)
   }
-  return <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="mb-3 flex items-center justify-between gap-3"><strong className="text-sm">{label}</strong><div className="flex gap-2"><button className="button-secondary" type="button" onClick={togglePlayback} disabled={!ready}>{playing ? '暂停' : '播放'}</button><button className="button-secondary" type="button" onClick={toggleRate} disabled={!ready}>{rate}×</button></div></div><div ref={container} aria-label={`${label}录音波形`} />{error && <p className="mt-2 text-sm text-red-700">{error}</p>}</div>
+  return <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="mb-3 flex items-center justify-between gap-3"><strong className="text-sm">{label} · 振幅波形</strong><div className="flex gap-2"><button className="button-secondary" type="button" onClick={togglePlayback} disabled={!ready}>{playing ? '暂停' : '播放'}</button><button className="button-secondary" type="button" onClick={toggleRate} disabled={!ready}>{rate}×</button></div></div><div ref={container} aria-label={`${label}录音振幅波形，播放光标随时间移动`} />{error && <p className="mt-2 text-sm text-red-700">{error}</p>}</div>
 }

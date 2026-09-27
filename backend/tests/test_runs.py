@@ -54,7 +54,7 @@ def test_confirmed_colors_produce_traceable_pronunciation_findings(tmp_path):
         assert report["comparison"]["shared_word_pairs"][0]["user_color"] == "red"
 
 
-def test_cloud_requires_explicit_key_and_model_without_leaking_key(tmp_path):
+def test_cloud_request_without_key_keeps_local_summaries_and_hides_key(tmp_path):
     settings = Settings(_env_file=None, pte_data_dir=tmp_path, alignment_provider="none")
     with TestClient(create_app(settings)) as client:
         audio = client.post("/api/v1/assets/audio", files={"file": ("sample.wav", one_second_silence(), "audio/wav")}).json()
@@ -62,9 +62,12 @@ def test_cloud_requires_explicit_key_and_model_without_leaking_key(tmp_path):
                  for role in ("user", "benchmark")]
         comparison = client.post("/api/v1/comparisons", json={"exercise": {"question_type": "DI"}, "samples": sides}).json()
         result = client.post(f"/api/v1/comparisons/{comparison['id']}/runs", json={"allow_cloud": True})
-        assert result.status_code == 422
-        assert result.json()["detail"]["code"] == "openai_key_and_model_required"
-        assert client.get(f"/api/v1/comparisons/{comparison['id']}/runs").json() == []
+        assert result.status_code == 200
+        report = client.get(f"/api/v1/runs/{result.json()['run_id']}/report").json()
+        assert report["config"]["llm_requested"] is True
+        assert report["config"]["llm_provider"] == "none"
+        assert report["summaries"]["fluency"]["source"] == "local_rules"
+        assert report["summaries"]["practice"]["source"] == "local_rules"
         assert "openai_api_key" not in client.get("/api/v1/settings/providers").text
 
 
@@ -78,6 +81,10 @@ def test_compatible_provider_can_rewrite_findings_without_exposing_key(tmp_path,
                  "statement": finding["statement"], "recommendation": "请回听并重录。"} for finding in findings]
 
     monkeypatch.setattr(OpenAICompatibleLLMProvider, "explain", rewrite)
+    def summarize(self, metrics, findings, practice_facts, fluency_baseline, practice_baseline):
+        return {"fluency": {"text": "请先回听停顿候选，再判断是否需要调整节奏。", "metric_keys": list(metrics)},
+                "practice": {"text": "请回听 Hello 所在短句，再重录比较。", "finding_ids": [item["id"] for item in findings]}}
+    monkeypatch.setattr(OpenAICompatibleLLMProvider, "summarize_report", summarize)
     settings = Settings(_env_file=None, pte_data_dir=tmp_path, alignment_provider="none",
                         llm_provider="openai_compatible", openai_api_key="test-local-key",
                         openai_analysis_model="gpt-6-sol", openai_base_url="http://localhost:8317/")
@@ -92,6 +99,7 @@ def test_compatible_provider_can_rewrite_findings_without_exposing_key(tmp_path,
         assert response.status_code == 200, response.text
         report = client.get(f"/api/v1/runs/{response.json()['run_id']}/report").json()
         assert report["diagnosis"]["llm_status"] == "used"
+        assert report["summaries"]["fluency"]["source"] == "ai"
         assert report["config"]["llm_provider"] == "openai_compatible"
         assert calls == [("http://localhost:8317/v1", "gpt-6-sol", 1)]
         assert "test-local-key" not in client.get("/api/v1/settings/providers").text

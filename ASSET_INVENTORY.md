@@ -1,6 +1,6 @@
 # PTE Speaking Lab 项目资产清单
 
-更新：2026-09-26。本清单覆盖项目维护的源码、配置、脚本、文档和测试文件。`data/`、`测试数据包/`、`.env`、虚拟环境、`node_modules/`、`frontend/dist/` 属于本地运行或私人数据，目录用途见末尾，不逐项公开内部文件名。以下路径均相对项目根目录。
+更新：2026-09-27。本清单覆盖项目维护的源码、配置、脚本、文档和测试文件。`data/`、`测试数据包/`、`.env`、虚拟环境、`node_modules/`、`frontend/dist/` 属于本地运行或私人数据，目录用途见末尾，不逐项公开内部文件名。以下路径均相对项目根目录。
 
 ## 文件夹与模块
 
@@ -54,11 +54,13 @@
 | `backend/app/domain/schemas.py` | Pydantic 输入模型；验证双边角色、分数、词序与候选来源。 |
 | `backend/app/screenshots/mapper.py` | Tesseract OCR、彩色正文提取、逐词颜色检测及保守顺序映射。 |
 | `backend/app/audio/prepare.py` | 音频哈希验证、FFmpeg 标准化和语音活动区间提取。 |
+| `backend/app/audio/acoustics.py` | 从衍生 WAV 限时提取音高估计与 RMS 能量展示曲线；失败不阻断主分析。 |
 | `backend/app/audio/alignment.py` | 对齐 Provider、WhisperX 适配、时间戳质量及无对齐退化。 |
 | `backend/app/engines/common.py` | 指标、证据对象及可序列化结果的共同构造函数。 |
 | `backend/app/engines/pronunciation.py` | 发音词色统计、红黄词优先级、截图候选证据与可选音素线索。 |
 | `backend/app/engines/fluency.py` | 独立计算词速、停顿、短语、语音占比和语速稳定性。 |
 | `backend/app/engines/diagnosis.py` | 在两个引擎完成后生成有证据引用的训练建议。 |
+| `backend/app/engines/report_summaries.py` | 用本次指标、红黄词和停顿生成双项中文总结，并校验可选 AI 改写。 |
 | `backend/app/comparison/service.py` | 共同原文词位覆盖、共享词 A/B、双边流利度差值。 |
 | `backend/app/analysis/runner.py` | 锁定样本版本，运行音频/双引擎/比较/诊断并保存不可变报告。 |
 | `backend/app/providers/openai_llm.py` | 可选官方 OpenAI 和 CLIProxyAPI 兼容接口文案改写；解析返回结构，证据 ID 在诊断层校验。 |
@@ -91,11 +93,13 @@
 | 文件 | 覆盖内容 |
 |---|---|
 | `backend/tests/test_audio.py` | 音频校验、标准化、VAD 与对齐退化。 |
+| `backend/tests/test_acoustics.py` | 已知音高信号、静音和超时的曲线降级。 |
 | `backend/tests/test_comparison_diagnosis.py` | 共享词比较、原文位置与跨维度诊断证据。 |
 | `backend/tests/test_engines.py` | 独立发音/流利度指标和不可用情形。 |
 | `backend/tests/test_health.py` | 启动、健康检查与配置。 |
 | `backend/tests/test_lan.py` | 内网页面和 API 的密码保护。 |
 | `backend/tests/test_runs.py` | 分析运行、候选词色、云端配置与历史报告不可变。 |
+| `backend/tests/test_report_summaries.py` | 本次数据专属总结及 AI 数字越界/调用失败回退。 |
 | `backend/tests/test_llm_provider.py` | CLIProxyAPI 兼容请求路径、JSON 解析与地址校验。 |
 | `backend/tests/test_samples.py` | 双边资产、样本修订、数据校验、旧词色表迁移与共享文件删除。 |
 | `backend/tests/test_screenshot_mapping.py` | OCR 词序、重复词、低置信度与页眉排除。 |
@@ -114,9 +118,10 @@
 | `frontend/src/style.css` | Tailwind 样式入口和共享表单/按钮样式。 |
 | `frontend/src/api/client.ts` | API 请求、错误处理和前后端数据类型。 |
 | `frontend/src/components/Waveform.tsx` | 音频波形、播放、证据位置跳转，以及同一页面内的互斥播放。 |
+| `frontend/src/components/AcousticPlot.tsx` | 可折叠的双边音高/能量曲线与相邻位置回听。 |
 | `frontend/src/pages/NewComparison.tsx` | 截图粘贴/选择、OCR 预览编辑、双边表单和词色复核。 |
 | `frontend/src/pages/ComparisonDetail.tsx` | 比较运行选项、Provider 状态、历史报告、删除与复核入口。 |
-| `frontend/src/pages/ReportView.tsx` | 双边报告、流利度说明、共享词颜色、默认红黄词双边上下文、时间轴快捷入口、完整证据切换、尾部跳转、上下文与单词片段回听。 |
+| `frontend/src/pages/ReportView.tsx` | 双边报告、紧邻时间轴的播放器、实际方法与缺失原因说明、数据专属总结、共享词、红黄词上下文和整段 WAV 定位回听。 |
 | `frontend/src/pages/Settings.tsx` | 配置状态和用户可见的设置说明。 |
 
 ## 脚本和文档
@@ -137,6 +142,8 @@
 | `docs/T00_FEASIBILITY.md` | 原始真实截图 OCR 和本机模型验证记录。 |
 | `docs/MVP_ACCEPTANCE.md` | MVP 双边真实样本验收记录。 |
 | `docs/RELEASE_1.0_TO_v1.99.md` | 从 `1.0` 基线到 `v1.99` 的功能、迁移、验证和限制汇总。 |
+| `docs/M5_LOCAL_AUDIO_DEPLOYMENT_PLAN.md` | M5 Pro 内网音频计算节点的分阶段部署方案。 |
+| `docs/EXTERNAL_SPEECH_DIAGNOSIS_REVIEW.md` | 外部口语诊断源码的功能审查、Edge TTS 路径及与本项目的技术选型对比。 |
 
 ## 本地运行目录
 

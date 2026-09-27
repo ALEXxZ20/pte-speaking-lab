@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Evidence, Report, SideResult } from '../api/client'
+import AcousticPlot from '../components/AcousticPlot'
 import { Waveform } from '../components/Waveform'
 
 type Role = 'user' | 'benchmark'
@@ -20,15 +21,55 @@ function fluencySummary(report: Report) {
   return (parts.length ? parts.join(' ') : '本次缺少足够可靠的双边时间指标，暂无法做数量对比。') + ' 差值为“我的回答减参考”，正值表示我在该指标上更高；质量“高/中/低”表示证据可靠程度，“无法判断”表示没有可用测量。速度差和这些指标都不是猩际评分。'
 }
 
-function SidePanel({ side, role, report, jump, setJump }: { side: SideResult; role: Role; report: Report; jump: { start: number; end?: number; nonce: number } | null; setJump: (jump: { start: number; end?: number; nonce: number }) => void }) {
-  const scores = side.sample
-  const counts = side.pronunciation.summary.counts
-  return <section className="panel space-y-5"><div><p className="eyebrow">{role === 'user' ? 'User' : 'Benchmark'}</p><h3 className="mt-1 text-xl font-semibold">{names[role]}</h3><p className="mt-1 text-sm text-slate-600">对齐 {side.alignment.trusted_count ?? 0}/{side.alignment.total_count ?? side.sample.tokens.length} 词 · 录音 {side.audio.duration_s.toFixed(1)} 秒</p></div><div className="grid grid-cols-3 gap-2">{([['发音', scores.pronunciation_score], ['流利度', scores.fluency_score], ['内容', scores.content_score]] as const).map(([name, score]) => <div key={name} className="rounded-xl bg-slate-50 p-3 text-center"><p className="text-xs text-slate-500">猩际{name}</p><p className="mt-1 font-semibold">{score ? `${score.value}/${score.max}` : '未提供'}</p></div>)}</div><Waveform label={names[role]} url={`/api/v1/runs/${report.run_id}/audio/${role}`} jump={jump} /><div><h4 className="font-semibold">逐词颜色</h4><p className="mt-1 text-sm text-slate-600">红 {counts.red} · 黄 {counts.yellow} · 绿 {counts.green} · <span className="font-semibold text-red-700" title="未知词需要手动复核">! 未知 {side.pronunciation.summary.unknown_count}（请手动复核）</span> · 截图候选 {side.pronunciation.summary.candidate_count || 0}</p><div className="mt-3 flex max-h-40 flex-wrap gap-1.5 overflow-auto">{side.sample.tokens.map(token => { const time = side.alignment.tokens[token.index]; const known = token.color_review_status === 'confirmed' || token.color_review_status === 'candidate' ? token.color : 'unknown'; return <button key={token.index} type="button" disabled={!time || time.quality !== 'medium' || time.start_s === null} onClick={() => setJump({ start: Math.max(0, time.start_s! - 0.2), end: (time.end_s || time.start_s!) + 0.2, nonce: Date.now() })} className={`rounded-md px-2 py-1 text-sm disabled:cursor-not-allowed ${colorStyles[known]}`} title={`${token.color_review_status === 'candidate' ? '截图候选，待人工复核；' : ''}${time?.quality === 'medium' ? '点击回听词片段' : '时间定位不可靠'}`}>{token.surface}</button> })}</div></div></section>
+function fluencyMissingExplanation(report: Report) {
+  // 只根据本次实际的 reason 解释缺失；缺 API key 不会影响音频测量。
+  const reasons = new Set((['user', 'benchmark'] as const).flatMap(role =>
+    Object.values(report.samples[role].fluency.metrics).filter(item => item.value === null).map(item => item.reason)))
+  const lines: string[] = []
+  if (reasons.has('vad_regions_unreliable')) {
+    const side = report.samples.user.audio
+    const nearlyAllSpeech = side.speech_regions?.quality === 'low' && side.speech_regions.speech_s > side.duration_s * 0.98
+    lines.push(nearlyAllSpeech ? '我的录音被语音活动检测近乎整段判为发声，无法可靠算发声词速、语音/静音比和发声占比；需要更清晰的录音或经真实样本验证的语音活动检测方案。' : '语音活动检测没有可靠分开语音与静音；发声词速、语音/静音比和发声占比暂无法计算，可检查录音噪声并重新录制。')
+  }
+  if (reasons.has('insufficient_word_timestamps') || reasons.has('no_reliable_speech_window') || reasons.has('no_reliable_pause_source')) lines.push('部分词级时间不足：检查转写是否与录音一致，并启用或修复词级对齐；无法精确定位时不补造时间。')
+  if (reasons.has('source_transcript_may_omit_disfluencies')) lines.push('重复、重启、填充词需要保留口误的逐字转写或人工标注；猩际转写可能省略它们，目前没有可开启的配置。')
+  if (reasons.has('too_few_windows')) lines.push('局部语速窗口数量不足，需要更长的可对齐语音，不能靠 API key 补算。')
+  return lines
 }
 
-function EvidenceTimeline({ report, setJump }: { report: Report; setJump: (role: Role, start: number, end?: number) => void }) {
+function SidePanel({ side, role, setJump }: { side: SideResult; role: Role; setJump: (jump: { start: number; end?: number; nonce: number }) => void }) {
+  const scores = side.sample
+  const counts = side.pronunciation.summary.counts
+  return <section className="panel space-y-5"><div><p className="eyebrow">{role === 'user' ? 'User' : 'Benchmark'}</p><h3 className="mt-1 text-xl font-semibold">{names[role]}</h3><p className="mt-1 text-sm text-slate-600">对齐 {side.alignment.trusted_count ?? 0}/{side.alignment.total_count ?? side.sample.tokens.length} 词 · 录音 {side.audio.duration_s.toFixed(1)} 秒</p></div><div className="grid grid-cols-3 gap-2">{([['发音', scores.pronunciation_score], ['流利度', scores.fluency_score], ['内容', scores.content_score]] as const).map(([name, score]) => <div key={name} className="rounded-xl bg-slate-50 p-3 text-center"><p className="text-xs text-slate-500">猩际{name}</p><p className="mt-1 font-semibold">{score ? `${score.value}/${score.max}` : '未提供'}</p></div>)}</div><div><h4 className="font-semibold">逐词颜色</h4><p className="mt-1 text-sm text-slate-600">红 {counts.red} · 黄 {counts.yellow} · 绿 {counts.green} · <span className="font-semibold text-red-700" title="未知词需要手动复核">! 未知 {side.pronunciation.summary.unknown_count}（请手动复核）</span> · 截图候选 {side.pronunciation.summary.candidate_count || 0}</p><div className="mt-3 flex max-h-40 flex-wrap gap-1.5 overflow-auto">{side.sample.tokens.map(token => { const time = side.alignment.tokens[token.index]; const known = token.color_review_status === 'confirmed' || token.color_review_status === 'candidate' ? token.color : 'unknown'; return <button key={token.index} type="button" disabled={!time || time.quality !== 'medium' || time.start_s === null} onClick={() => setJump({ start: Math.max(0, time.start_s! - 0.2), end: (time.end_s || time.start_s!) + 0.2, nonce: Date.now() })} className={`rounded-md px-2 py-1 text-sm disabled:cursor-not-allowed ${colorStyles[known]}`} title={`${token.color_review_status === 'candidate' ? '截图候选，待人工复核；' : ''}${time?.quality === 'medium' ? '点击回听词片段' : '时间定位不可靠'}`}>{token.surface}</button> })}</div></div></section>
+}
+
+function PlaybackDock({ report, jumps, jump }: { report: Report; jumps: Record<Role, { start: number; end?: number; nonce: number } | null>; jump: (role: Role, start: number, end?: number) => void }) {
+  // 波形与时间轴上下相邻；时间轴卡片复用整段录音播放器，不生成音频切片。
+  return <section className="panel" aria-label="证据回听播放器">
+    <h3 className="text-lg font-semibold">证据回听 · 双边录音</h3>
+    <p className="mt-1 text-sm text-slate-600">点击下方证据卡片会在对应的整段录音中定位播放。波形高度表示振幅，不表示音高；当前播放位置由深色光标显示。</p>
+    <div className="mt-4 grid gap-4 lg:grid-cols-2">{(['user', 'benchmark'] as const).map(role => <div key={role} className="min-w-0">
+      <Waveform label={names[role]} url={`/api/v1/runs/${report.run_id}/audio/${role}`} jump={jumps[role]} height={144} />
+      <div className="mt-1 flex justify-between px-2 text-xs text-slate-500"><span>0 秒</span><span>{report.samples[role].audio.duration_s.toFixed(1)} 秒</span></div>
+      <details className="mt-2 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-medium">查看音高与能量曲线（辅助观察）</summary><div className="mt-3"><AcousticPlot data={report.samples[role].acoustic} duration={report.samples[role].audio.duration_s} label={names[role]} onSeek={time => jump(role, Math.max(0, time - 0.75), Math.min(report.samples[role].audio.duration_s, time + 0.75))} /></div></details>
+    </div>)}</div>
+  </section>
+}
+
+function EvidenceTimeline({ report, setJump, focusRequest }: { report: Report; setJump: (role: Role, start: number, end?: number) => void; focusRequest: { id: string; nonce: number } | null }) {
   const listRef = useRef<HTMLDivElement>(null)
+  const handledFocusRequest = useRef<number | null>(null)
   const [focused, setFocused] = useState(true)
+  useEffect(() => {
+    if (!focusRequest || handledFocusRequest.current === focusRequest.nonce) return
+    // 同一跳转请求只处理一次，否则手动切回红黄词视图会被旧请求再次覆盖。
+    if (focused) { setFocused(false); return }
+    handledFocusRequest.current = focusRequest.nonce
+    const element = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[data-evidence-id]') || [])
+      .find(node => node.dataset.evidenceId === focusRequest.id)
+    if (element) element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    else document.getElementById('evidence-timeline')?.scrollIntoView({ behavior: 'smooth' })
+  }, [focusRequest, focused])
   const allEvidence: { role: Role; item: Evidence }[] = (['user', 'benchmark'] as const).flatMap(role =>
     [...report.samples[role].pronunciation.evidence, ...report.samples[role].fluency.evidence]
       .map(item => ({ role, item })))
@@ -57,6 +98,10 @@ function EvidenceTimeline({ report, setJump }: { report: Report; setJump: (role:
     (token.color === 'red' || token.color === 'yellow'))
   const context = (role: Role, index: number) => {
     const side = report.samples[role]
+    const targetToken = side.sample.tokens[index]
+    // 两侧各显示自己的猩际词色；参考侧绿色不再被统一的紫色高亮掩盖。
+    const targetColor = targetToken && ['confirmed', 'candidate'].includes(targetToken.color_review_status) ? targetToken.color : 'unknown'
+    const colorNames: Record<string, string> = { red: 'red／红', yellow: 'yellow／黄', green: 'green／绿', unknown: 'unknown／未知' }
     const tokens = side.sample.tokens.slice(Math.max(0, index - 3), index + 4)
     const timed = tokens.map(token => side.alignment.tokens.find(time => time.index === token.index))
       .filter(time => time?.quality === 'medium' && time.start_s !== null && time.end_s !== null)
@@ -70,8 +115,8 @@ function EvidenceTimeline({ report, setJump }: { report: Report; setJump: (role:
     const wordStart = nearby.length ? Math.max(0, Math.min(...nearby.map(time => time!.start_s!)) - 0.12) : 0
     const wordEnd = nearby.length ? Math.max(...nearby.map(time => time!.end_s!)) + 0.12 : undefined
     return <div className="rounded-lg bg-white/80 p-3">
-      <p className="text-xs font-semibold text-slate-600">{names[role]} · {playable ? `${targetTime.start_s!.toFixed(2)}s` : '时间定位不可靠'}</p>
-      <p className="mt-1 text-sm leading-7">{tokens.map(token => <span key={token.index} className={token.index === index ? 'rounded bg-indigo-100 px-1 font-semibold text-indigo-900' : ''}>{token.surface}{' '}</span>)}</p>
+      <p className="text-xs font-semibold text-slate-600">{names[role]} · {playable ? `${targetTime.start_s!.toFixed(2)}s` : '时间定位不可靠'} · 猩际词色：<span className={`rounded px-1 ${colorStyles[targetColor]}`}>{colorNames[targetColor]}</span>{targetToken?.color_review_status === 'candidate' && '（截图候选）'}</p>
+      <p className="mt-1 text-sm leading-7">{tokens.map(token => <span key={token.index} className={token.index === index ? `rounded px-1 font-semibold ${colorStyles[targetColor]}` : ''}>{token.surface}{' '}</span>)}</p>
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
         <button type="button" className="text-sm font-medium text-indigo-700 underline disabled:text-slate-400" disabled={!playable || end === undefined} onClick={() => setJump(role, start, end)}>回听这段上下文</button>
         <button type="button" className="text-sm font-medium text-indigo-700 underline disabled:text-slate-400" disabled={!playable || wordEnd === undefined} onClick={() => setJump(role, wordStart, wordEnd)} title="播放目标词及前后各一词；邻词时间不可靠时仅播放可定位部分">回听这个词</button>
@@ -95,7 +140,7 @@ function EvidenceTimeline({ report, setJump }: { report: Report; setJump: (role:
         </article>
       }) : entries.map(({ role, item }) => {
         const color = highlightColor({ role, item })
-        return <button key={item.id} type="button" className={`flex w-full items-center justify-between gap-3 rounded-lg p-3 text-left text-sm hover:ring-2 hover:ring-indigo-200 ${color ? colorStyles[color] : 'bg-slate-50'}`} onClick={() => setJump(role, Math.max(0, (item.start_s || 0) - 0.15), (item.end_s || item.start_s || 0) + 0.15)}>
+        return <button key={item.id} data-evidence-id={item.id} type="button" className={`flex w-full items-center justify-between gap-3 rounded-lg p-3 text-left text-sm hover:ring-2 hover:ring-indigo-200 ${color ? colorStyles[color] : 'bg-slate-50'}`} onClick={() => setJump(role, Math.max(0, (item.start_s || 0) - 0.15), (item.end_s || item.start_s || 0) + 0.15)}>
           <span><strong>{names[role]}</strong> · {labelFor(role, item)}</span>
           <span className="shrink-0 text-slate-500">{item.start_s?.toFixed(2)}s · 证据可信度：{qualityNames[item.quality] || '未知'}</span>
         </button>
@@ -112,12 +157,30 @@ function TranscriptCoverage({ report }: { report: Report }) {
   return <section className="panel"><h3 className="text-lg font-semibold">共同朗读稿与实际转写</h3><p className="mt-1 text-sm text-slate-600">{coverage.basis === 'shared_reading_text' ? `原稿 ${coverage.script_word_count} 词；我匹配 ${coverage.user_matched_script_words} 词，AI 参考匹配 ${coverage.benchmark_matched_script_words} 词；共同位置 ${coverage.shared_script_words} 词。` : '旧记录没有共同朗读稿；仅按两侧转写顺序寻找相同词。'}</p><p className="mt-2 text-sm text-slate-600">转写中的未匹配词：我 {coverage.user_unmatched_transcript_words}，AI 参考 {coverage.benchmark_unmatched_transcript_words}。{coverage.user_script_tail_unobserved !== null && `原稿尾部未见于转写：我 ${coverage.user_script_tail_unobserved} 词，AI 参考 ${coverage.benchmark_script_tail_unobserved} 词。`}</p><p className="mt-2 text-xs text-amber-800">差异可能来自实际朗读、猩际识别或录音截断，不能单凭转写判定发音错误。</p></section>
 }
 
+function AnalysisMethods({ report }: { report: Report }) {
+  // 从当前不可变报告读取实际运行结果，不把“可安装的 Provider”当成本次已使用的方法。
+  const user = report.samples.user
+  const benchmark = report.samples.benchmark
+  const provider = report.config?.llm_provider && report.config.llm_provider !== 'none' ? report.config.llm_provider : null
+  return <details className="panel"><summary className="cursor-pointer text-lg font-semibold">本次实际使用的分析方法与限制</summary>
+    <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
+      <li>猩际截图逐词颜色：我的回答红 {user.pronunciation.summary.counts.red}、黄 {user.pronunciation.summary.counts.yellow}；其中截图候选 {user.pronunciation.summary.candidate_count || 0}，候选需要人工复核。</li>
+      <li>词级时间对齐：我的回答可信 {user.alignment.trusted_count ?? 0}/{user.alignment.total_count ?? user.sample.tokens.length} 词，参考可信 {benchmark.alignment.trusted_count ?? 0}/{benchmark.alignment.total_count ?? benchmark.sample.tokens.length} 词；未可靠定位的词不强行回听。</li>
+      <li>流利度：计算 WPM、词间停顿候选、短语长度和局部语速波动；语音活动检测质量为我的 {qualityNames[user.audio.speech_regions?.quality || 'unavailable'] || '未知'}、参考 {qualityNames[benchmark.audio.speech_regions?.quality || 'unavailable'] || '未知'}。低质量结果只作回听线索。</li>
+      <li>音高和能量：{user.acoustic?.status === 'complete' && benchmark.acoustic?.status === 'complete' ? '两侧均已提取展示曲线' : '至少一侧曲线不可用或属于旧报告'}；曲线不参与发音或流利度分数。</li>
+      <li>OpenPronounce：{report.config?.pronunciation_provider === 'openpronounce' ? '本次启用未经校准的音素候选' : '本次未启用'}。AI 文字：{provider ? `本次请求 ${provider}，各段实际来源在总结旁标出` : '本次只使用本机规则'}。</li>
+    </ul>
+  </details>
+}
+
 function FluencyPanel({ report }: { report: Report }) {
+  const missing = fluencyMissingExplanation(report)
+  const summary = report.summaries?.fluency
   return <section className="panel"><h3 className="text-lg font-semibold">流利度对比</h3>
     <p className="mt-1 text-sm text-slate-600">两侧按同一算法计算；实际词数与录音尾部可能不同。</p>
-    <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">“无法判断”和旧报告中的 unavailable 表示没有可靠测量：词级时间缺失时请配置对齐，录音质量不足时请重新录制；重复、重启、填充词目前无法可靠检测，没有可开启的配置。质量高/中/低表示证据可靠程度，低质量请结合回听。</p>
+    <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700"><p>“无法判断”及旧报告的 unavailable 表示本次没有可靠测量，并非缺少 API key。质量高/中/低表示证据可靠程度。</p>{missing.map(line => <p key={line} className="mt-1">{line}</p>)}</div>
     <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[45rem] text-left text-sm"><thead><tr className="border-b border-slate-200 text-slate-500"><th className="py-2">指标</th><th>我的回答</th><th>Benchmark</th><th>差值</th><th>质量</th></tr></thead><tbody>{Object.entries(report.comparison.fluency_metric_differences).map(([key, item]) => <tr key={key} className="border-b border-slate-100"><th className="py-2 font-medium">{metricNames[key] || key}</th><td>{display(item.user.value, item.user.unit)}</td><td>{display(item.benchmark.value, item.benchmark.unit)}</td><td>{item.delta_user_minus_benchmark === null ? '—' : item.delta_user_minus_benchmark.toFixed(2)}</td><td className={item.quality === 'low' ? 'text-amber-700' : 'text-slate-500'}>{qualityNames[item.quality] || item.quality}</td></tr>)}</tbody></table></div>
-    <p className="mt-4 rounded-lg bg-indigo-50 p-4 text-sm leading-6 text-indigo-950">{fluencySummary(report)}</p>
+    <div className="mt-4 rounded-lg bg-indigo-50 p-4 text-sm leading-6 text-indigo-950"><p className="font-semibold">{summary?.source === 'ai' ? 'AI 基于本次指标的总结' : '本机基于本次指标的总结'}</p><p className="mt-1">{summary?.text || fluencySummary(report)}</p>{summary && <details className="mt-2 text-xs"><summary className="cursor-pointer">查看指标读法与差值说明</summary><p className="mt-1">{fluencySummary(report)}</p></details>}{report.summaries?.fallback_reason && <p className="mt-1 text-xs">AI 调用或校验未通过，已保留本机总结。</p>}</div>
   </section>
 }
 
@@ -125,7 +188,7 @@ function SharedWords({ report }: { report: Report }) {
   return <section className="panel"><h3 className="text-lg font-semibold">共享词 A/B</h3><p className="mt-1 text-sm text-slate-600">按共同朗读稿的位置比较同一词。未配对和尾部差异不自动算发音问题。</p><div className="mt-4 flex max-h-64 flex-wrap gap-2 overflow-auto">{report.comparison.shared_word_pairs.map((pair, index) => <div key={`${pair.user_index}-${pair.benchmark_index}-${index}`} className={`rounded-lg border border-slate-200 px-3 py-2 text-sm ${pair.user_color === 'red' ? 'bg-red-100' : pair.user_color === 'yellow' ? 'bg-amber-100' : ''}`}><strong>{pair.word}</strong><span className="ml-3 text-slate-600">我 {pair.user_color} · 高分 {pair.benchmark_color}</span></div>)}{!report.comparison.shared_word_pairs.length && <p className="text-slate-500">没有可比较的共享词。</p>}</div></section>
 }
 
-function TrainingPriorities({ report }: { report: Report }) {
+function TrainingPriorities({ report, onFocusEvidence }: { report: Report; onFocusEvidence: (id: string) => void }) {
   const providerName = report.config?.llm_provider === 'openai_compatible' ? 'CLIProxyAPI' : 'OpenAI'
   const status = report.diagnosis.llm_status
   const origin = status === 'used' ? `${providerName} 已改写文字`
@@ -139,10 +202,18 @@ function TrainingPriorities({ report }: { report: Report }) {
     <div className="mt-4 space-y-4">
       {report.diagnosis.findings.map((finding, index) => {
         const original = originals.get(finding.id)
+        const card = report.diagnosis.teaching_cards?.find(item => item.finding_id === finding.id)
         return <article key={finding.id} className="rounded-xl bg-indigo-50 p-4">
-          <div className="flex justify-between gap-3"><h4 className="font-semibold">{index + 1}. {finding.statement}</h4><span className="text-xs text-indigo-700">{finding.confidence_level}</span></div>
-          <p className="mt-2 text-sm text-slate-700">{finding.recommendation}</p>
+          <div className="flex justify-between gap-3"><h4 className="font-semibold">{index + 1}. {finding.statement}</h4><span className="text-xs text-indigo-700">可信度：{finding.confidence_level}</span></div>
+          {card ? <div className="mt-3 grid gap-2 text-sm leading-6 text-slate-700">
+            <p><strong>观察：</strong>{card.observation}</p>
+            {!!card.evidence_examples?.length && <p><strong>本次证据：</strong>{card.evidence_examples.join('、')}</p>}
+            <p><strong>可能解释：</strong>{card.interpretation}</p>
+            <p><strong>怎么练：</strong>{card.practice}</p>
+            <p><strong>下次检查：</strong>{card.next_check}</p>
+          </div> : <p className="mt-2 text-sm text-slate-700">{finding.recommendation}</p>}
           <p className="mt-2 text-xs text-slate-500">证据 {finding.evidence_ids.length} 项 · {finding.limitations.join(' ')}</p>
+          {finding.evidence_ids.length > 0 && <button type="button" className="mt-2 text-sm font-medium text-indigo-700 underline" onClick={() => onFocusEvidence(finding.evidence_ids[0])}>在时间轴查看相关证据</button>}
           {status === 'used' && original && <details className="mt-3 text-sm text-slate-600">
             <summary className="cursor-pointer">查看改写前的本机建议</summary>
             <p className="mt-2">问题：{original.statement}</p>
@@ -155,19 +226,45 @@ function TrainingPriorities({ report }: { report: Report }) {
   </section>
 }
 
+function TeachingLibrary({ report }: { report: Report }) {
+  // 新报告展示证据绑定的总结；旧报告仍可由原有 findings 生成保守的本机回退。
+  const summary = report.summaries?.practice
+  const legacyText = report.diagnosis.findings.length ? report.diagnosis.findings.slice(0, 2).map(item => item.recommendation).join(' ') : '这份历史报告没有足够的个性化训练证据。'
+  return <section className="panel"><h3 className="text-lg font-semibold">发音与节奏分析</h3>
+    <div className="mt-3 rounded-lg bg-indigo-50 p-4 text-sm leading-7 text-indigo-950"><p className="font-semibold">{summary?.source === 'ai' ? 'AI 基于本次证据的总结' : '本机基于本次证据的总结'}</p><p className="mt-1">{summary?.text || legacyText}</p>{report.summaries?.fallback_reason && <p className="mt-1 text-xs">AI 调用或校验未通过，已保留本机总结。</p>}</div>
+    <details className="mt-4"><summary className="cursor-pointer text-sm font-medium text-slate-700">查看通用练习方法</summary>
+    <p className="mt-2 text-sm text-slate-600">以下是自主练习参考，不是对本次录音中具体音素错误的诊断。</p>
+    <div className="mt-4 grid gap-3 md:grid-cols-2 text-sm leading-6">
+      <div className="rounded-lg bg-slate-50 p-3"><strong>元音对比</strong><p>选一组容易混淆的词，先听辨，再在短句中录两遍；关注听者能否区分词义，避免仅凭时长判定元音。</p></div>
+      <div className="rounded-lg bg-slate-50 p-3"><strong>辅音与词尾</strong><p>回听词尾是否仍容易辨认，先在短语中练，再放回完整句子；不要把识别器漏词直接当作漏发辅音。</p></div>
+      <div className="rounded-lg bg-slate-50 p-3"><strong>信息重点</strong><p>先划出句子要传达的关键词，尝试用自然的节奏突出重点；功能词也可能在对比或纠正时被强调。</p></div>
+      <div className="rounded-lg bg-slate-50 p-3"><strong>意群与停顿</strong><p>按意思分段回听，判断停顿是否帮助理解。长停顿不一定是错误，重点看位置、上下文和整句是否连贯。</p></div>
+    </div></details>
+  </section>
+}
+
 export default function ReportView({ report }: { report: Report }) {
   const [jumps, setJumps] = useState<Record<Role, { start: number; end?: number; nonce: number } | null>>({ user: null, benchmark: null })
+  const [focusRequest, setFocusRequest] = useState<{ id: string; nonce: number } | null>(null)
+  useEffect(() => {
+    // 切换历史报告时清除上一份报告的回听区间与证据跳转。
+    setJumps({ user: null, benchmark: null })
+    setFocusRequest(null)
+  }, [report.run_id])
   const jump = (role: Role, start: number, end?: number) => setJumps(previous => ({ ...previous, [role]: { start, end, nonce: Date.now() + Math.random() } }))
   return <div className="space-y-6">
     <nav aria-label="报告快捷入口" className="sticky top-2 z-20 flex justify-end">
       <a href="#evidence-timeline" className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-indigo-700">查看证据时间轴 ↓</a>
     </nav>
     <div className={`rounded-xl p-4 text-sm ${report.status === 'complete' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>报告状态：{report.status === 'complete' ? '完整' : '部分完成'}。低质量或缺失的测量不会被当作已证实的发音问题。</div>
-    <div className="grid gap-6 lg:grid-cols-2">{(['user', 'benchmark'] as const).map(role => <SidePanel key={role} role={role} side={report.samples[role]} report={report} jump={jumps[role]} setJump={value => setJumps(previous => ({ ...previous, [role]: value }))} />)}</div>
-    <EvidenceTimeline report={report} setJump={jump} />
+    <div className="grid gap-6 lg:grid-cols-2">{(['user', 'benchmark'] as const).map(role => <SidePanel key={role} role={role} side={report.samples[role]} setJump={value => setJumps(previous => ({ ...previous, [role]: value }))} />)}</div>
+    <PlaybackDock report={report} jumps={jumps} jump={jump} />
+    <EvidenceTimeline report={report} setJump={jump} focusRequest={focusRequest} />
     <TranscriptCoverage report={report} />
+    <AnalysisMethods report={report} />
     <FluencyPanel report={report} />
     <SharedWords report={report} />
-    <TrainingPriorities report={report} />
+    <TrainingPriorities report={report} onFocusEvidence={id => setFocusRequest({ id, nonce: Date.now() + Math.random() })} />
+    <TeachingLibrary report={report} />
   </div>
 }

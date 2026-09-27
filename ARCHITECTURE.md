@@ -374,6 +374,12 @@ LM_STUDIO_BASE_URL=http://127.0.0.1:1234/v1
 - 人工样本集：包含高分样本、红黄词密集、长停顿、噪声、重复、false start、转写与音频不符。记录时间戳误差、误报及 M2 资源峰值；验证后再确定对齐默认方案。
 - 运行日志：仅记录 run/sample ID、阶段耗时、Provider 名与模型、质量等级、错误码；不记录密钥或完整转写。分析报告记录代码/规则/配置/Provider 版本，方便复现。
 
+### 当前实现补充：声学展示与双项总结
+
+`audio/acoustics.py` 在独立限时子进程中读取 16 kHz 单声道衍生 WAV，以 50 ms 步长计算 RMS 能量和归一化自相关音高估计，最多保存 2400 点。低能量或周期性不足时基频为 `null`；整段静音、短录音、超时或进程失败只返回 `acoustic.status=unavailable`。曲线保存于不可变报告的 `samples.{role}.acoustic`，旧报告缺字段时前端正常降级；不进入 Pronunciation/Fluency Engine 的评分或 Diagnosis Engine 的因果推断。NumPy 为基础依赖，锁定版本及许可证另行记录。
+
+`engines/report_summaries.py` 从已保存的双边指标、词色和可定位停顿先生成带指标键/证据 ID 的本机总结。用户本次启用 AI 且 Provider 已配置时，Provider 额外接收经过筛选的指标、规则结论及少量引用事实，返回流利度和发音/节奏两段结构化文本；引用键、finding ID、数字和具体音素断言由后端校验。失败时原子地保留两段本机文本。总结只追加到报告 JSON，无数据库迁移；`allow_cloud` 是本次运行选择，无 key 时改为本机回退。现有报告及样本修订保持不可变。
+
 ## 12. Phase 2/3 的技术演进
 
 **Phase 2：** 优化 Apple Silicon 对齐（WhisperX 或替代方案）、OpenPronounce 校准、更多截图版式与批量导入、多 benchmark、训练趋势；可让较大模型在 M5 Pro/48 GB 运行，但通过 Provider 切换而非重写引擎。

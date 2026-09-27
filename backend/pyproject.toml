@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "pte-speaking-lab"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["fastapi==0.135.1", "uvicorn==0.42.0", "pydantic-settings==2.13.1", "Pillow==12.1.1", "python-multipart==0.0.20", "webrtcvad-wheels==2.0.14"]
+dependencies = ["fastapi==0.135.1", "uvicorn==0.42.0", "pydantic-settings==2.13.1", "Pillow==12.1.1", "python-multipart==0.0.20", "webrtcvad-wheels==2.0.14", "numpy==2.4.6"]
 
 [project.optional-dependencies]
 dev = ["pytest==9.0.2", "httpx==0.28.1"]

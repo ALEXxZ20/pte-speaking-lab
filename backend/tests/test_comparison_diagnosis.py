@@ -54,6 +54,10 @@ def test_diagnosis_rejects_invented_evidence_and_falls_back():
     assert result["findings"][0]["statement"] != "unsupported"
     existing = {item["id"] for item in pron["evidence"] + flu["evidence"]}
     assert all(id in existing for finding in result["findings"] for id in finding["evidence_ids"])
+    assert len(result["teaching_cards"]) <= 3
+    assert all(set(card["evidence_ids"]) <= existing and card["practice"] and card["next_check"]
+               for card in result["teaching_cards"])
+    assert "音素" not in result["teaching_cards"][0]["interpretation"]
 
 
 def test_diagnosis_does_not_apply_partial_llm_edits_on_validation_failure():

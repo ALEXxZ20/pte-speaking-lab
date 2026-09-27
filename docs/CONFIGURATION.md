@@ -30,7 +30,7 @@ OPENAI_API_KEY=你的CLIProxyAPI访问密钥
 
 当前本机 `.env` 已配置 Provider、地址、`gpt-6-sol` 和访问密钥；密钥值仅留在本机。新安装时，从 CLIProxyAPI 配置中取得其服务端允许的 API key，直接填入本地 `.env` 的 `OPENAI_API_KEY=` 后面；不要把密钥发到聊天里，也不要给它加 `VITE_` 前缀。本机已通过 `/v1/models` 确认该模型，并用 `Choices of Lunch` 的真实证据完成一次建议改写；这只验证当前代理配置，不保证将来模型授权持续有效。项目后端与代理在同一台 Mac 上，故应使用 `127.0.0.1`；内网浏览器无需直连 8317。
 
-后端虚拟环境已安装 `backend/requirements-llm.lock` 中的 OpenAI SDK；更换机器时按该文件安装。填好密钥后运行 `./scripts/restart.sh`，到比较页面勾选 **“允许 CLIProxyAPI 改写训练建议”** 再点击“开始分析”。该选择随每次运行单独提交为 `allow_cloud=true`；默认不调用代理。代理只接收规则结论和所需证据，用于文字改写，不重新打 PTE 分，也不生成 benchmark 音频。调用失败会回退本机规则建议，报告中的 `llm_status` 会显示 `fallback_to_rules`。前端只收到“密钥是否已配置”和模型名，看不到密钥。实际模型能否调用，仍取决于 CLIProxyAPI 的上游配置与授权。
+后端虚拟环境已安装 `backend/requirements-llm.lock` 中的 OpenAI SDK；更换机器时按该文件安装。填好密钥后运行 `./scripts/restart.sh`，比较页会默认勾选 **“使用 CLIProxyAPI 生成双项总结并改写训练建议”**，用户仍可取消。该选择随每次运行单独提交为 `allow_cloud=true`；未配置密钥时自动用本机规则，无需中止分析。代理只接收所需指标、规则结论和少量引用证据，不接收整段录音，也不重新打 PTE 分或生成 benchmark 音频。调用失败、密钥失效或输出校验失败时保留本机总结；报告分别标明建议改写及双项总结的来源。前端只收到“密钥是否已配置”和模型名，看不到密钥。
 
 若改用官方 OpenAI API，把 `LLM_PROVIDER` 设为 `openai`，`OPENAI_BASE_URL` 留空，填写独立的 OpenAI Platform API key 和受支持模型，再重启服务。ChatGPT Plus 订阅不提供该 API key；OpenAI Platform 独立计费。
 
@@ -62,6 +62,8 @@ OPENAI_API_KEY=你的CLIProxyAPI访问密钥
 | `PTE_LAN_PASSWORD` | 空；本机已生成 | 内网密码，至少 16 字符；空或过短时内网服务拒绝启动。 |
 
 Anthropic、Gemini、Ollama/LM Studio 的专用适配器及本地 ASR/LLM 仍未实现；仅通用 OpenAI-compatible Chat Completions 路径可用于 CLIProxyAPI 等兼容服务。
+
+音高与能量曲线当前默认生成，无额外 `.env` 开关：依赖基础环境中的 `numpy`，每侧最多 2400 点、子进程限时 20 秒。它是可折叠的回听辅助，不参与评分；处理失败会在曲线区显示原因，其余分析继续。流利度表格里的“无法判断”取决于录音的 VAD、词级对齐或是否有逐字口误数据，**配置 API key 不会补出缺失测量**。
 
 ## 4. 数据与安全操作
 

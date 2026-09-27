@@ -3,7 +3,38 @@ from collections import Counter
 import re
 from uuid import uuid4
 
-VERSION = "diagnosis-v1"
+VERSION = "diagnosis-v2"
+
+
+PRACTICE_CHECKS = {
+    "red_word_practice": "下次录同一句，核对词色是否变化，并回听该词在整句中是否容易听清。",
+    "pronunciation_associated_hesitation": "下次观察同一位置是否仍出现停顿；不要把一次停顿直接归因为发音。",
+    "long_pause_practice": "下次核对停顿位置和次数，并判断停顿是否落在自然的意思分界。",
+    "rate_stability_practice": "下次对照局部语速波动及整句回听，判断节奏是否更容易跟上。",
+}
+
+
+def _teaching_cards(findings: list[dict], known: dict[str, dict]) -> list[dict]:
+    """将每条建议引用的实际词或停顿位置带到卡片，避免只显示通用练习话术。"""
+    def examples(finding: dict) -> list[str]:
+        result = []
+        for evidence_id in finding["evidence_ids"][:3]:
+            item = known[evidence_id]
+            if item["kind"] == "xingji_word_color":
+                word = item["details"].get("surface", "目标词")
+                result.append(f"{word}（{item['start_s']:.2f} 秒）" if item.get("start_s") is not None else word)
+            elif item["kind"] == "pause_candidate" and item.get("start_s") is not None:
+                result.append(f"{item['start_s']:.2f} 秒附近的停顿候选（证据质量：{item['quality']}）")
+        return result
+    return [{"finding_id": finding["id"], "kind": finding["kind"],
+             "observation": finding["statement"],
+             "interpretation": "这是需要回听核查的线索，不等于已经确认的发音原因。" if finding["kind"] == "red_word_practice" else "结合原句和语义判断；时间或数量上的接近不能证明原因。",
+             "practice": finding["recommendation"],
+             "next_check": PRACTICE_CHECKS[finding["kind"]],
+             "evidence_ids": finding["evidence_ids"],
+             "evidence_examples": examples(finding),
+             "limitations": finding["limitations"],
+             "confidence_level": finding["confidence_level"]} for finding in findings]
 
 
 def _numbers(value: str) -> Counter[str]:
@@ -93,4 +124,5 @@ def diagnose(user_pronunciation: dict, user_fluency: dict, comparison: dict,
     assert all(id in known for finding in findings for id in finding["evidence_ids"])
     return {"rule_version": VERSION, "findings": findings, "rule_findings": rule_findings,
             "llm_status": llm_status,
+            "teaching_cards": _teaching_cards(findings, known),
             "recommendations": [finding["recommendation"] for finding in findings]}

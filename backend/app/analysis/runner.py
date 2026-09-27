@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 from app.audio.alignment import NoAlignment, create_alignment_provider
+from app.audio.acoustics import extract_bounded
 from app.audio.prepare import prepare_audio
 from app.comparison.service import compare
 from app.config import Settings
@@ -11,12 +12,13 @@ from app.engines.diagnosis import diagnose
 from app.engines.common import plain
 from app.engines.fluency import analyze_fluency
 from app.engines.pronunciation import analyze_pronunciation
+from app.engines.report_summaries import build_summaries
 from app.persistence.database import connect
 from app.persistence.samples import now, uid
 from app.providers.openai_llm import OpenAILLMProvider, OpenAICompatibleLLMProvider
 from app.providers.openpronounce import OpenPronouncePhones
 
-VERSION = "analysis-v3"
+VERSION = "analysis-v4"
 
 
 def _snapshot(db, sample_id: str) -> tuple[str, dict]:
@@ -43,17 +45,19 @@ def _prepare_one(sample_id: str, sample: dict, settings: Settings, pronunciation
     pronunciation = analyze_pronunciation(sample_id, sample, alignment, wav_path, pronunciation_provider)
     fluency = analyze_fluency(sample_id, sample, audio, alignment,
                               settings.pause_min_ms, settings.long_pause_ms, settings.very_long_pause_ms)
+    # 曲线是可选展示数据：超时或失败会局部降级，不能改变发音/流利度证据。
+    acoustic = extract_bounded(wav_path)
     return {"sample_id": sample_id, "sample": sample, "audio": audio, "alignment": alignment,
-            "pronunciation": pronunciation, "fluency": fluency, "alignment_error": alignment_error,
+            "pronunciation": pronunciation, "fluency": fluency, "acoustic": acoustic,
+            "alignment_error": alignment_error,
             "elapsed_s": round(time.perf_counter() - started, 3)}
 
 
 def run_comparison(comparison_id: str, settings: Settings, allow_cloud: bool = False,
                    use_openpronounce: bool = False) -> dict:
-    if allow_cloud and not (settings.openai_api_key.get_secret_value().strip() and settings.openai_analysis_model.strip()):
-        raise ValueError("openai_key_and_model_required")
     llm = None
-    if allow_cloud:
+    cloud_ready = bool(settings.openai_api_key.get_secret_value().strip() and settings.openai_analysis_model.strip())
+    if allow_cloud and cloud_ready:
         if settings.llm_provider == "openai":
             llm = OpenAILLMProvider(settings.openai_api_key.get_secret_value(), settings.openai_analysis_model)
         elif settings.llm_provider == "openai_compatible":
@@ -74,8 +78,8 @@ def run_comparison(comparison_id: str, settings: Settings, allow_cloud: bool = F
         reading_text_raw = comparison["reading_text_raw"]
         run_id = uid("run")
         config = {"alignment_provider": settings.alignment_provider, "pronunciation_provider": "openpronounce" if use_openpronounce else "none",
-                  "llm_provider": settings.llm_provider if allow_cloud else "none",
-                  "llm_model": settings.openai_analysis_model if allow_cloud else None,
+                  "llm_requested": allow_cloud, "llm_provider": settings.llm_provider if llm else "none",
+                  "llm_model": settings.openai_analysis_model if llm else None,
                   "pause_min_ms": settings.pause_min_ms,
                   "long_pause_ms": settings.long_pause_ms, "very_long_pause_ms": settings.very_long_pause_ms,
                   "cross_dimension_window_ms": settings.cross_dimension_window_ms}
@@ -90,11 +94,13 @@ def run_comparison(comparison_id: str, settings: Settings, allow_cloud: bool = F
                                     left["pronunciation"], right["pronunciation"], left["fluency"], right["fluency"],
                                     reading_text_raw)
         diagnosis = diagnose(left["pronunciation"], left["fluency"], comparison_result, llm, settings.cross_dimension_window_ms)
+        # 本机先生成可追溯总结；已授权 AI 时再尝试改写，失效会回退。
+        summaries = build_summaries(comparison_result, diagnosis, left["pronunciation"], left["fluency"], llm)
         partial = any(result["alignment"]["status"] != "complete" or result["fluency"]["status"] != "complete" or result["pronunciation"]["status"] != "complete" for result in results.values())
         report = {"run_id": run_id, "comparison_id": comparison_id, "status": "partial" if partial else "complete",
                   "pipeline_version": VERSION, "config": config,
                   "revision_ids": {role: snapshots[role][0] for role in snapshots},
-                  "samples": results, "comparison": comparison_result, "diagnosis": diagnosis,
+                  "samples": results, "comparison": comparison_result, "diagnosis": diagnosis, "summaries": summaries,
                   "limitations": ["Benchmark is not a standard answer or official scoring reference.",
                                   "Content scores are stored Xingji inputs; no content scoring is performed."]}
         report = plain(report)
@@ -128,7 +134,7 @@ def run_comparison(comparison_id: str, settings: Settings, allow_cloud: bool = F
                        (report["status"], json.dumps({"alignment": left["alignment"]["provider"],
                                                      "pronunciation": left["pronunciation"]["provider"],
                                                      "llm": diagnosis["llm_status"]}), now(), run_id))
-        return {"run_id": run_id, "status": report["status"], "completed_steps": ["pronunciation", "fluency", "comparison", "diagnosis"],
+        return {"run_id": run_id, "status": report["status"], "completed_steps": ["pronunciation", "fluency", "comparison", "diagnosis", "summaries"],
                 "degraded_reasons": [f"{role}_{results[role]['alignment']['reason']}" for role in results if results[role]["alignment"].get("reason")]}
     except Exception as exc:
         with connect(settings.database_path) as db:
