@@ -61,7 +61,7 @@ cd ~/pte-speaking-lab
 cp .env.docker.example .env.docker
 ```
 
-编辑 `.env.docker` 中的 `PTE_DOCKER_BIND_IP` 为 M5 的固定内网 IPv4，`PTE_DOCKER_DATA_DIR` 为 M5 上**绝对路径**，例如 `/Users/<M5_USER>/pte-speaking-lab-data`。用 `openssl rand -hex 24` 生成至少 16 字符密码，填入 `PTE_LAN_PASSWORD`；不要把密码写进命令历史、Git 或聊天。`LLM_PROVIDER=none` 且 `OPENAI_API_KEY=`；暂不接 CLIProxyAPI。`PTE_LAN_BIND_IP` 不需设置为 M5 地址：容器内部监听 `0.0.0.0`，宿主机端口只绑定 `PTE_DOCKER_BIND_IP`。
+编辑 `.env.docker` 中的 `PTE_DOCKER_BIND_IP` 为 M5 的固定内网 IPv4，`PTE_DOCKER_HOST_PORT` 保持 `8765`，`PTE_DOCKER_DATA_DIR` 为 M5 上**绝对路径**，例如 `/Users/<M5_USER>/pte-speaking-lab-data`。用 `openssl rand -hex 24` 生成至少 16 字符密码，填入 `PTE_LAN_PASSWORD`；不要把密码写进命令历史、Git 或聊天。`LLM_PROVIDER=none` 且 `OPENAI_API_KEY=`；暂不接 CLIProxyAPI。`PTE_LAN_BIND_IP` 不需设置为 M5 地址：容器内部监听 `0.0.0.0:8765`，宿主机端口只绑定 `PTE_DOCKER_BIND_IP` 和 `PTE_DOCKER_HOST_PORT`。
 
 ```bash
 mkdir -p "$HOME/pte-speaking-lab-data"

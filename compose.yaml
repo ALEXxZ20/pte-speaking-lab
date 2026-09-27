@@ -18,7 +18,7 @@ services:
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
     ports:
-      - "${PTE_DOCKER_BIND_IP:?Set M5 private LAN IP in .env.docker}:8765:8765"
+      - "${PTE_DOCKER_BIND_IP:?Set host private LAN IP in .env.docker}:${PTE_DOCKER_HOST_PORT:-8765}:8765"
     volumes:
       - "${PTE_DOCKER_DATA_DIR:?Set persistent data directory in .env.docker}:/app/data"
     restart: unless-stopped

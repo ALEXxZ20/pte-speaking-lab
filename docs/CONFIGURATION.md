@@ -2,15 +2,15 @@
 
 **本文件对应当前可运行代码。** 项目根目录为 `/Users/alex/codex_project/PTE口语诊断分析/`。配置文件是根目录 `.env`，示例为 [`.env.example`](../.env.example)。更改 `.env` 后重启服务。不要把真实密钥、密码或录音提交到 Git。
 
-## 1. 两种启动方式
+## 1. 三种启动方式
 
 | 模式 | 命令 | 地址 | 用途 |
 |---|---|---|---|
 | 本机开发 | `./scripts/dev.sh` | `http://127.0.0.1:5173` | Vite 热更新，后端在 8000；脚本强制关闭 LAN 模式。 |
 | 内网使用 | `npm run build --prefix frontend`，然后 `./scripts/start.sh` | `http://192.168.5.14:8765`（当前配置） | FastAPI 同源提供网页、API 和录音；HTTP Basic 密码保护，无热更新。 |
-| M5 Docker | `docker compose --env-file .env.docker up -d --build` | `http://<M5固定内网IP>:8765` | 一个 ARM64 镜像提供网页/API，业务数据挂载在镜像外；需先在 M5 实机验收。 |
+| M5 Docker | `docker compose --env-file .env.docker up -d --no-build` | `http://192.168.5.19:8765`（当前部署） | 一个 ARM64 镜像提供网页/API，业务数据挂载在镜像外；已在 M5 实机验收。首次安装需先构建镜像。 |
 
-Docker 模式使用独立的 `.env.docker`（从 [模板](../.env.docker.example)复制），不更改本机 `.env`。`PTE_DOCKER_BIND_IP` 是 M5 宿主机端口绑定地址，`PTE_DOCKER_DATA_DIR` 是宿主机持久目录；容器内监听 `0.0.0.0`，镜像内模型放在 `/opt/pte-models`。M5 暂设 `LLM_PROVIDER=none`，不使用当前电脑的 CLIProxyAPI。完整账号、SSH、迁移与构建步骤见 [M5 Docker 部署手册](M5_DOCKER_DEPLOYMENT.md)。
+Docker 模式使用独立的 `.env.docker`（从 [模板](../.env.docker.example)复制），不更改本机 `.env`。`PTE_DOCKER_BIND_IP` 是宿主机私有内网 IP，`PTE_DOCKER_HOST_PORT` 是宿主机端口（默认 8765），`PTE_DOCKER_DATA_DIR` 是宿主机持久目录；容器内监听 8765，镜像内模型放在 `/opt/pte-models`。M5 暂设 `LLM_PROVIDER=none`，不使用当前电脑的 CLIProxyAPI。两种运行方式的日常命令与隔离条件见 [运维手册](OPERATIONS.md)，首次部署过程见 [M5 Docker 部署手册](M5_DOCKER_DEPLOYMENT.md)。
 
 `./scripts/start.sh` 后台启动，`./scripts/stop.sh` 停止，`./scripts/restart.sh` 重启；服务由 macOS `launchd` 托管，命令结束后仍运行。需要前台查看日志时可运行 `./scripts/serve_lan.sh`。Mac 休眠或退出服务后其他设备无法访问。浏览器会弹出登录框，用户名默认为 `pte`，密码在项目根目录 `.env` 的 `PTE_LAN_PASSWORD`。此密码已随机生成；不要发送完整 `.env` 给别人。给他人密码时应采用可信渠道。
 

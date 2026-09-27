@@ -57,9 +57,9 @@ backend/.venv/bin/python -m pip install -r backend/requirements-llm.lock
 
 ## 本地数据、迁移与测试
 
-`.env`、`data/`、`测试数据包/`、依赖目录和构建产物被 Git 忽略。原始录音与截图完整保存；SQLite 在 `data/db/pte.sqlite3`。分析运行锁定双边不可变样本版本。迁移至 M5 Pro 时复制项目和 `data/`，在新机器重装同版依赖并配置 `.env`；数据库使用相对文件路径，不依赖原机器位置。
+`.env`、`data/`、`测试数据包/`、依赖目录和构建产物被 Git 忽略。原始录音与截图完整保存；SQLite 在 `data/db/pte.sqlite3`。分析运行锁定双边不可变样本版本。若在另一台 Mac **原生运行**，需迁移项目和一致数据快照、重装同版依赖并配置该机器自己的 `.env`；数据库使用相对文件路径。当前 M5 使用的则是下面的 Docker 方案，业务数据单独挂载在镜像外。
 
-M5 Pro 已按 [单镜像 Docker 部署手册](docs/M5_DOCKER_DEPLOYMENT.md) 构建并在内网运行：一个原生 Linux ARM64 镜像包含前端、后端、系统工具与预装音频模型，`data/` 和密码留在镜像外。真实 *Choices of Lunch* 分析、历史数据和重启持久性已验证；实测及限制见 [进度记录](progress.md)。Edge TTS 保持在线；容器 CPU 模型不能使用 Mac Metal GPU。
+M5 Pro 已按 [单镜像 Docker 部署手册](docs/M5_DOCKER_DEPLOYMENT.md) 构建并在内网运行：一个原生 Linux ARM64 镜像包含前端、后端、系统工具与预装音频模型，`data/` 和密码留在镜像外。真实 *Choices of Lunch* 分析、历史数据和重启持久性已验证；部署经过与限制见 [部署记录](docs/DEPLOYMENT_RECORD_2026-09-28.md)。M2 原生服务和 M5 Docker 是独立实例，新增数据不会自动同步。两种运行方式的启停、密码、备份、目录和同机并行方法见 [运维手册](docs/OPERATIONS.md)。Edge TTS 保持在线；容器 CPU 模型不能使用 Mac Metal GPU。
 
 ```bash
 backend/.venv/bin/python -m pytest backend/tests -q

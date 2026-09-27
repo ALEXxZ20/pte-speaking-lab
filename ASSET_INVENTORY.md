@@ -1,6 +1,6 @@
 # PTE Speaking Lab 项目资产清单
 
-更新：2026-09-27。本清单覆盖项目维护的源码、配置、脚本、文档和测试文件。`data/`、`测试数据包/`、`.env`、虚拟环境、`node_modules/`、`frontend/dist/` 属于本地运行或私人数据，目录用途见末尾，不逐项公开内部文件名。以下路径均相对项目根目录。
+更新：2026-09-28。本清单覆盖项目维护的源码、配置、脚本、文档和测试文件。`data/`、`测试数据包/`、`.env`、虚拟环境、`node_modules/`、`frontend/dist/` 属于本地运行或私人数据，目录用途见末尾，不逐项公开内部文件名。以下路径均相对项目根目录。
 
 ## 文件夹与模块
 
@@ -149,11 +149,13 @@
 | `docs/RELEASE_1.0_TO_v1.99.md` | 从 `1.0` 基线到 `v1.99` 的功能、迁移、验证和限制汇总。 |
 | `docs/M5_LOCAL_AUDIO_DEPLOYMENT_PLAN.md` | M5 Pro 内网音频计算节点的分阶段部署方案。 |
 | `docs/M5_DOCKER_DEPLOYMENT.md` | M5 Pro 单容器部署、SSH、数据迁移和实机验收步骤。 |
-| `docs/M5_MODEL_NOTICES.md` | 镜像中计划预装的模型、来源、版本与第三方许可摘要。 |
+| `docs/DEPLOYMENT_RECORD_2026-09-28.md` | M2/M5 实际部署顺序、资产位置、测试结果与仍需核对的事项。 |
+| `docs/OPERATIONS.md` | 原生与 Docker 两种实例的状态、启停、密码、更新、备份及同机并行操作。 |
+| `docs/M5_MODEL_NOTICES.md` | 镜像已预装模型的来源、版本与第三方许可摘要。 |
 | `Dockerfile` | 原生 ARM64 多阶段构建：前端、Python 依赖、模型预装与运行镜像。 |
-| `compose.yaml` | 一个应用容器、固定内网 IP 端口映射、持久数据挂载和内存上限。 |
+| `compose.yaml` | 一个应用容器、可配置宿主机内网 IP/端口映射、持久数据挂载和内存上限。 |
 | `.dockerignore` | 阻止密钥、录音、数据库与本机依赖进入构建上下文。 |
-| `.env.docker.example` | M5 Docker 运行配置的公开模板，不含真实密码。 |
+| `.env.docker.example` | Docker 运行配置的公开模板，含独立宿主机端口项，不含真实密码。 |
 | `scripts/prefetch_container_models.py` | 构建期固定模型下载、断网加载和模型清单校验。 |
 | `scripts/export_m5_data.py` | SQLite 一致备份、资产复制与迁移 SHA-256 核对。 |
 | `docs/EXTERNAL_SPEECH_DIAGNOSIS_REVIEW.md` | 外部口语诊断源码的功能审查、Edge TTS 路径及与本项目的技术选型对比。 |
@@ -172,3 +174,5 @@
 | `测试数据包/` | 私人的真实双边录音、截图和参考文本。 |
 | `backend/.venv/`、`frontend/node_modules/` | Python/JavaScript 安装依赖。 |
 | `frontend/dist/` | 生产前端构建，由内网服务提供。 |
+
+M5 Docker 的真实配置在目标机项目根目录 `.env.docker`，业务数据在 `/Users/zihanzong/pte-speaking-lab-data/`；二者都不进入 Git 或镜像。M2 原生实例使用本项目 `.env` 与 `data/`。M2 若另建 Docker 实例，必须使用独立的 `.env.docker`、宿主机端口和业务数据目录，见 [运维手册](docs/OPERATIONS.md)。
