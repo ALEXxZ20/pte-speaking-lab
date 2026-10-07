@@ -7,6 +7,11 @@
 - If the documents conflict, preserve the product boundary in `PROJECT_SPEC.md` and flag the specific conflict before changing an interface. Update both documents when an agreed design change affects both.
 - Work in this project directory. Keep scratch files out of the repository and do not modify unrelated projects.
 
+## Git workflow
+
+- Use `dev` as the default branch for project changes and commits. The local `dev` branch tracks `origin/dev` and is based on `main`.
+- Before editing or committing, ensure the current checkout is `dev`. If the worktree is detached, switch to `dev`; if local `dev` does not exist, create it from `main`. Use another branch only when the user explicitly requests it.
+
 ## MVP boundaries
 
 - Focus on Pronunciation and Fluency. Store and display Xingji Content scores, but do not implement independent Content scoring, image understanding, or semantic content diagnosis.
